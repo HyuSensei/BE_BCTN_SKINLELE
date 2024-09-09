@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác nhận email của bạn</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap');
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: #f8f0f2;
+            margin: 0;
+            padding: 0;
+        }
+
+        table {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%);
+            border-radius: 12px 12px 0 0;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-family: 'Poppins', sans-serif;
+            font-size: 54px;
+            font-weight: 700;
+            background: linear-gradient(to right, #ff6b6b, #ff0844);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .header h1::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 3px;
+            background: linear-gradient(to right, #ff6b6b, #ff0844);
+            border-radius: 2px;
+        }
+
+        .content {
+            padding: 50px 40px;
+        }
+
+        .verification-code {
+            background-color: #fff1f2;
+            border: 2px dashed #ffc9cc;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .verification-code span {
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            color: #ff7e91;
+        }
+
+        .footer {
+            background-color: #fff1f2;
+            border-radius: 0 0 12px 12px;
+            padding: 30px 40px;
+            text-align: center;
+            font-size: 14px;
+            color: #ff7e91;
+        }
+
+        .footer a {
+            color: #ff7e91;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        <tr>
+            <td class="header">
+                <h1>Skinlele</h1>
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p style="margin-bottom: 30px; font-size: 18px;">Xin chào <strong>{{name}}</strong> 👋,</p>
+                <p style="margin-bottom: 30px; font-size: 18px;">Chào mừng bạn đến với SkineLeLe! Chúng tôi rất vui khi
+                    bạn trở thành một phần của cộng đồng yêu thích làm đẹp của chúng tôi. Để hoàn tất quá trình đăng ký,
+                    vui lòng sử dụng mã xác nhận dưới đây ⬇️</p>
+                <div class="verification-code">
+                    <span style="color: #ff7e91;">{{verificationCode}}</span>
+                </div>
+                <p style="margin-bottom: 30px; font-size: 18px;">Mã xác nhận sẽ hết hạn sau 5 phút. Nếu bạn không yêu
+                    cầu xác nhận này, vui lòng bỏ qua email này.</p>
+                <p style="margin-bottom: 30px; font-size: 18px;">Trân trọng,<br>Đội ngũ SkineLeLe 💕</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                <p style="margin: 0;">Đây là email tự động, vui lòng không trả lời.</p>
+                <p style="margin: 10px 0;">© 2024 SkineLeLe. Đã đăng ký bản quyền.</p>
+                <p style="margin: 0;"><a href="https://skinelele.com">skinelele.com</a></p>
+            </td>
+        </tr>
+    </table>
+</body>
+
+</html>

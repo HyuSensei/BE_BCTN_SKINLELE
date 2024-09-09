@@ -24,7 +24,7 @@ export const OrderSessionSchema = new mongoose.Schema(
         },
         image: {
           type: String,
-          default: "",
+          required: true,
         },
         color: {
           name: {
@@ -105,10 +105,6 @@ export const OrderSessionSchema = new mongoose.Schema(
     totalAmount: {
       type: Number,
       required: true,
-    },
-    stripeSessionId: {
-      type: String,
-      default: "",
     },
   },
   { timestamps: true }
