@@ -54,7 +54,7 @@ export const authMiddlewareUser = (req, res, next) =>
     req,
     res,
     next,
-    "X-Customer-Header",
+    "X-User-Header",
     User,
     process.env.JWT_SECRET_KEY_USER
   );

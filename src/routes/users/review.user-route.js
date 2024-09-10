@@ -7,6 +7,8 @@ import {
   getReviewByProduct,
 } from "../../controllers/review.controller.js";
 
+const router = express.Router();
+
 router.post(
   "/",
   authMiddlewareUser,
@@ -16,4 +18,4 @@ router.post(
 );
 router.get("/:slug", getReviewByProduct);
 
-const router = express.Router();
+export default router;

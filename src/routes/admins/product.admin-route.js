@@ -6,9 +6,11 @@ import {
   updateProduct,
 } from "../../controllers/product.controller.js";
 
+const router = express.Router();
+
 router.get("/", getAllProduct);
 router.post("/", createProduct);
 router.put("/:id", updateProduct);
 router.delete("/:id", removeProduct);
 
-const router = express.Router();
+export default router;

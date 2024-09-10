@@ -55,29 +55,30 @@ export const ProductSchema = new mongoose.Schema(
         required: true,
       },
     },
-    variants: {
-      default: [],
-      color: {
-        name: {
-          type: String,
-          default: "",
-        },
-        code: {
-          type: String,
-          default: "",
-        },
-        image: {
-          url: {
+    variants: [
+      {
+        color: {
+          name: {
             type: String,
             default: "",
           },
-          publicId: {
+          code: {
             type: String,
             default: "",
+          },
+          image: {
+            url: {
+              type: String,
+              default: "",
+            },
+            publicId: {
+              type: String,
+              default: "",
+            },
           },
         },
       },
-    },
+    ],
     enable: {
       type: Boolean,
       default: true,
@@ -85,7 +86,7 @@ export const ProductSchema = new mongoose.Schema(
     tags: [
       {
         type: String,
-        default: "",
+        default: [],
         enum: ["HOT", "NEW", "SALE", "SELLING"],
       },
     ],

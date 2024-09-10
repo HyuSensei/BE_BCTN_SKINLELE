@@ -5,7 +5,7 @@ export const getAllCategory = async (req, res) => {
   try {
     const { page, pageSize, name } = req.query;
     if (!page && !pageSize && !name) {
-      const categories = await Category.find().lean().exec();
+      const categories = await Category.find().sort({ level: 1 }).lean().exec();
       const categoryTree = buildCategoryTree(categories);
       return res.status(200).json({
         success: true,
@@ -17,7 +17,12 @@ export const getAllCategory = async (req, res) => {
       const skip = (pageNumber - 1) * limitNumber;
       const filter = name ? { name: { $regex: name, $options: "i" } } : {};
       const [categories, total] = await Promise.all([
-        Category.find(filter).skip(skip).limit(limitNumber).lean().exec(),
+        Category.find(filter)
+          .sort({ level: 1, name: 1 })
+          .skip(skip)
+          .limit(limitNumber)
+          .lean()
+          .exec(),
         Category.countDocuments(filter),
       ]);
       const categoryTree = buildCategoryTree(categories);
@@ -30,6 +35,7 @@ export const getAllCategory = async (req, res) => {
           currentPage: pageNumber,
           totalPages: Math.ceil(total / limitNumber),
           totalItems: total,
+          pageSize: limitNumber,
         };
       }
       return res.status(200).json(response);
@@ -76,7 +82,6 @@ export const createCategory = async (req, res) => {
     // Create new category
     const newCategory = new Category({
       name,
-      slug: slugify(name, { lower: true, locale: "vi" }),
       parent: parent || null,
       level,
     });
@@ -224,5 +229,21 @@ const deleteDescendants = async (parentId) => {
   for (const child of children) {
     await deleteDescendants(child._id);
     await Category.findByIdAndDelete(child._id);
+  }
+};
+
+export const getAllFilter = async (req, res) => {
+  try {
+    const categories = await Category.find();
+    return res.status(200).json({
+      success: true,
+      data: categories,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: true,
+      data: [],
+    });
   }
 };

@@ -6,9 +6,11 @@ import {
   deleteBrand,
 } from "../../controllers/brand.controller.js";
 
+const router = express.Router();
+
 router.get("/", getAllBrand);
 router.post("/", createBrand);
 router.put("/:id", updateBrand);
 router.delete("/:id", deleteBrand);
 
-const router = express.Router();
+export default router;

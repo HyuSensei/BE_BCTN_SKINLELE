@@ -4,7 +4,7 @@ import {
   registerUserValidate,
   resetPasswordValidate,
   updateAccountValidate,
-} from "../../validates/auth.validate";
+} from "../../validates/auth.validate.js";
 import {
   getAccountUser,
   login,
@@ -16,6 +16,8 @@ import {
 } from "../../controllers/auth.controller.js";
 import { validateMiddleWare } from "../../middleware/validate.middleware.js";
 import { authMiddlewareUser } from "../../middleware/auth.middleware.js";
+
+const router = express.Router();
 
 router.post("/login", loginUserValidate, validateMiddleWare, login);
 router.post("/register", registerUserValidate, validateMiddleWare, register);
@@ -36,4 +38,4 @@ router.put(
 );
 router.get("/account", authMiddlewareUser, getAccountUser);
 
-const router = express.Router();
+export default router;
