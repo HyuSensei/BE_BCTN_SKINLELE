@@ -4,6 +4,11 @@ import Category from "../models/category.model.js";
 export const getAllCategory = async (req, res) => {
   try {
     const { page, pageSize, name } = req.query;
+    const pageNumber = parseInt(page) || 1;
+    const limitNumber = parseInt(pageSize) || 10;
+    const skip = (pageNumber - 1) * limitNumber;
+    const filter = name ? { name: { $regex: name, $options: "i" } } : {};
+
     if (!page && !pageSize && !name) {
       const categories = await Category.find().sort({ level: 1 }).lean().exec();
       const categoryTree = buildCategoryTree(categories);
@@ -12,10 +17,6 @@ export const getAllCategory = async (req, res) => {
         data: categoryTree,
       });
     } else {
-      const pageNumber = parseInt(page) || 1;
-      const limitNumber = parseInt(pageSize) || 10;
-      const skip = (pageNumber - 1) * limitNumber;
-      const filter = name ? { name: { $regex: name, $options: "i" } } : {};
       const [categories, total] = await Promise.all([
         Category.find(filter)
           .sort({ level: 1, name: 1 })
@@ -25,19 +26,18 @@ export const getAllCategory = async (req, res) => {
           .exec(),
         Category.countDocuments(filter),
       ]);
-      const categoryTree = buildCategoryTree(categories);
+
       let response = {
         success: true,
-        data: categoryTree,
-      };
-      if (pageSize) {
-        response.pagination = {
+        data: categories,
+        pagination: {
           currentPage: pageNumber,
           totalPages: Math.ceil(total / limitNumber),
           totalItems: total,
           pageSize: limitNumber,
-        };
-      }
+        },
+      };
+
       return res.status(200).json(response);
     }
   } catch (error) {
