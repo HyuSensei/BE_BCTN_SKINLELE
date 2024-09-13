@@ -64,7 +64,6 @@ export const updateProduct = async (req, res) => {
       tags,
       enable,
     } = req.body;
-
     const updateData = {
       name,
       categories,
