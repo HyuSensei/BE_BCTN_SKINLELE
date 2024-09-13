@@ -229,53 +229,6 @@ export const getProductHome = async (req, res) => {
   }
 };
 
-// export const getAllProduct = async (req, res) => {
-//   try {
-//     const page = parseInt(req.query.page) || 1;
-//     const pageSize = parseInt(req.query.pageSize) || 12;
-//     const { search } = req.query;
-//     const skip = (page - 1) * pageSize;
-//     let filter = {};
-//     if (search) {
-//       filter = Object.assign(filter, {
-//         name: {
-//           $regex: search,
-//           $options: "i",
-//         },
-//       });
-//     }
-
-//     const [total, products] = await Promise.all([
-//       Product.countDocuments(filter),
-//       Product.find(filter)
-//         .populate({ path: "category", select: "name" })
-//         .skip(skip)
-//         .limit(pageSize)
-//         .lean()
-//         .exec(),
-//     ]);
-
-//     return res.status(200).json({
-//       success: true,
-//       pagination: {
-//         currentPage: page,
-//         totalPages: Math.ceil(total / pageSize),
-//         pageSize: pageSize,
-//         totalItems: total,
-//       },
-//       data: products,
-//     });
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Internal Server Error",
-//       data: [],
-//       error: error.message,
-//     });
-//   }
-// };
-
 export const getAllProduct = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;

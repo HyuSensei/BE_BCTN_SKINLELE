@@ -21,6 +21,16 @@ export const AdminSchema = new mongoose.Schema(
       default: "ADMIN",
       enum: ["ADMIN", "SUPPORT"],
     },
+    avatar: {
+      url: {
+        type: String,
+        default: "",
+      },
+      publicId: {
+        type: String,
+        default: "",
+      },
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -263,8 +263,9 @@ export const getReviewByAdmin = async (req, res) => {
       success: true,
       data: reviews,
       pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / pageSize),
+        page: page,
+        pageSize: pageSize,
+        totalPage: Math.ceil(total / pageSize),
         totalItems: total,
       },
     });

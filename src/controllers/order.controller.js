@@ -443,35 +443,47 @@ export const getOrderByAdmin = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 10;
-    const { status, search } = req.query;
+    const { status, paymentMethod, fromDate, toDate, search } = req.query;
     const skip = (page - 1) * pageSize;
     let filter = {};
+
     if (status) {
-      filter = Object.assign(filter, {
-        status,
-      });
+      filter.status = status;
     }
+
+    if (paymentMethod) {
+      filter.paymentMethod = paymentMethod;
+    }
+
+    if (fromDate && toDate) {
+      filter.createdAt = {
+        $gte: new Date(fromDate),
+        $lte: new Date(toDate),
+      };
+    }
+
     if (search) {
-      filter.$and.push({
-        $or: [
-          { name: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-        ],
-      });
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { "user.name": { $regex: search, $options: "i" } },
+        { "user.email": { $regex: search, $options: "i" } },
+      ];
     }
+
     const [orders, total] = await Promise.all([
       Order.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(pageSize))
-        .populate("userId", "name email"),
+        .populate("user", "name email"),
       Order.countDocuments(filter),
     ]);
+
     res.status(200).json({
       success: true,
       data: orders,
       pagination: {
-        currentPage: Number(page),
+        page: Number(page),
         totalPages: Math.ceil(total / pageSize),
         totalItems: total,
       },

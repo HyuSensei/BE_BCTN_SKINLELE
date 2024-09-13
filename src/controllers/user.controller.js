@@ -4,22 +4,26 @@ export const getAllUser = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 10;
-    const { search } = req.query;
+    const { search, status } = req.query;
     const skip = (page - 1) * pageSize;
 
     let filter = {};
     if (search) {
-      filter = {
-        $or: [
-          { name: { $regex: search, $options: "i" } },
-          { email: { $regex: search, $options: "i" } },
-        ],
-      };
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ];
+    }
+    if (status === "active") {
+      filter.isActive = true;
+    } else if (status === "inactive") {
+      filter.isActive = false;
     }
 
     const [users, total] = await Promise.all([
       User.find(filter)
-        .select("name email avatar isActive")
+        .select("name email avatar isActive createdAt")
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(pageSize)
         .lean(),
@@ -30,7 +34,7 @@ export const getAllUser = async (req, res) => {
       success: true,
       data: users,
       pagination: {
-        currentPage: page,
+        page: page,
         totalPages: Math.ceil(total / pageSize),
         totalUsers: total,
         pageSize,
