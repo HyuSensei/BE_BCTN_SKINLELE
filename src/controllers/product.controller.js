@@ -18,6 +18,14 @@ export const createProduct = async (req, res) => {
       capacity,
     } = req.body;
 
+    const existingProduct = await Product.findOne({ name }).lean();
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        message: "Tên sản phẩm đã tồn tại",
+      });
+    }
+
     const newProduct = new Product({
       name,
       categories,
@@ -78,7 +86,7 @@ export const updateProduct = async (req, res) => {
     };
 
     Object.keys(updateData).forEach(
-      (key) => updateData[key] === undefined && delete updateData[key]
+      (key) => updateData[key] === (undefined || "") && delete updateData[key]
     );
 
     if (name) {
@@ -381,4 +389,3 @@ export const getProductDetailBySlug = async (req, res) => {
     });
   }
 };
-

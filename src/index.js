@@ -12,6 +12,7 @@ import User from "./models/user.model.js";
 import passport from "passport";
 import { googleCallback } from "./controllers/auth.controller.js";
 import { handleWebhookOrder } from "./controllers/order.controller.js";
+import { errorHandler } from "./configs/errorHandler.js";
 
 dotenv.config();
 
