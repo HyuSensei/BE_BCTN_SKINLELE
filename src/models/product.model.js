@@ -87,7 +87,7 @@ export const ProductSchema = new mongoose.Schema(
       {
         type: String,
         default: [],
-        enum: ["HOT", "NEW", "SALE", "SELLING"],
+        enum: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
       },
     ],
     capacity: {
