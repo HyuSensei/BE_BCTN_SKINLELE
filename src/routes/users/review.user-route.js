@@ -16,6 +16,6 @@ router.post(
   validateMiddleWare,
   createReview
 );
-router.get("/:slug", getReviewByProduct);
+router.get("/:productId", getReviewByProduct);
 
 export default router;

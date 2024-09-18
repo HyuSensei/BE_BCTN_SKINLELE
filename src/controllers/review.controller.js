@@ -134,10 +134,10 @@ export const removeReview = async (req, res) => {
 
 export const getReviewByProduct = async (req, res) => {
   try {
-    const { slug } = req.params;
+    const { productId } = req.params;
     const { page = 1, pageSize = 10, rate, hasImage, hasComment } = req.query;
 
-    const product = await Product.findOne({ slug });
+    const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -194,8 +194,8 @@ export const getReviewByProduct = async (req, res) => {
       success: true,
       data: reviews,
       pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(pageSize)),
+        page: parseInt(page),
+        totalPage: Math.ceil(total / parseInt(pageSize)),
         totalItems: total,
         pageSize: parseInt(pageSize),
       },

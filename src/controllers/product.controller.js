@@ -192,7 +192,6 @@ export const getProductHome = async (req, res) => {
     if (!tags || typeof tags !== "string") {
       return res.status(400).json({
         success: false,
-        message: "Thiếu thông tin tags",
         data: [],
       });
     }
@@ -202,32 +201,54 @@ export const getProductHome = async (req, res) => {
     if (tagList.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Danh sách tags không hợp lệ",
         data: [],
       });
     }
 
-    const productsByTag = await Promise.all(
-      tagList.map(async (tag) => {
-        const products = await Product.find({ tags: tag })
-          .populate({ path: "categories", select: "name" })
-          .populate({ path: "brand", select: "name" })
-          .limit(8)
-          .exec();
+    const usedProductIds = new Set();
+    const productsByTag = [];
 
-        return {
-          tag,
-          products,
-        };
+    for (const tag of tagList) {
+      const products = await Product.find({
+        tags: tag,
+        _id: { $nin: Array.from(usedProductIds) },
       })
-    );
+        .populate({ path: "categories", select: "name" })
+        .populate({ path: "brand", select: "name" })
+        .limit(10)
+        .lean()
+        .exec();
+
+      products.forEach((product) => usedProductIds.add(product._id.toString()));
+
+      let title;
+      switch (tag) {
+        case "HOT":
+          title = "Sản phẩm nổi bật";
+          break;
+        case "SELLING":
+          title = "Sản phẩm bán chạy";
+          break;
+        case "NEW":
+          title = "Sản phẩm mới";
+          break;
+        default:
+          title = `Sản phẩm ${tag}`;
+      }
+
+      productsByTag.push({
+        tag,
+        title,
+        products,
+      });
+    }
 
     return res.status(200).json({
       success: true,
       data: productsByTag,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       data: [],
@@ -373,12 +394,73 @@ export const getProductPageSearch = async (req, res) => {
 export const getProductDetailBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const product = await Product.findOne({
-      slug,
-    }).populate({ path: "category", select: "name slug" });
+    const product = await Product.aggregate([
+      { $match: { slug } },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "_id",
+          foreignField: "product",
+          as: "reviews",
+        },
+      },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "categories",
+          foreignField: "_id",
+          as: "categoryDetails",
+        },
+      },
+      {
+        $lookup: {
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brandDetails",
+        },
+      },
+      { $unwind: "$brandDetails" },
+      {
+        $project: {
+          ...productFields,
+          averageRating: {
+            $ifNull: [{ $avg: "$reviews.rate" }, 0],
+          },
+          totalReviews: {
+            $size: "$reviews",
+          },
+          categories: {
+            $map: {
+              input: "$categoryDetails",
+              as: "category",
+              in: {
+                _id: "$$category._id",
+                name: "$$category.name",
+                slug: "$$category.slug",
+              },
+            },
+          },
+          brand: {
+            _id: "$brandDetails._id",
+            name: "$brandDetails.name",
+            slug: "$brandDetails.slug",
+          },
+        },
+      },
+    ]);
+
+    if (product.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+        data: {},
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      data: product,
+      data: product[0],
     });
   } catch (error) {
     return res.status(500).json({
@@ -388,4 +470,18 @@ export const getProductDetailBySlug = async (req, res) => {
       error: error.message,
     });
   }
+};
+
+const productFields = {
+  _id: 1,
+  name: 1,
+  slug: 1,
+  images: 1,
+  price: 1,
+  description: 1,
+  mainImage: 1,
+  variants: 1,
+  enable: 1,
+  tags: 1,
+  capacity: 1,
 };
