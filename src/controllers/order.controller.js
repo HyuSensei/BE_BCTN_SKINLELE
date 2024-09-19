@@ -2,6 +2,8 @@ import Order from "../models/order.model.js";
 import { ignoreLogger, ProductCode, VNPay, VnpLocale } from "vnpay";
 import Stripe from "stripe";
 import OrderSession from "../models/order-session.model.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -198,7 +200,6 @@ const createOrderWebhook = async ({
   const orderSession = await OrderSession.findById(orderId)
     .select("-__v -createdAt -updatedAt -_id")
     .lean();
-
   if (!orderSession) return;
 
   switch (action) {
