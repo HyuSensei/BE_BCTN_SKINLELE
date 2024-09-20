@@ -35,7 +35,7 @@ export const getAllUser = async (req, res) => {
       data: users,
       pagination: {
         page: page,
-        totalPages: Math.ceil(total / pageSize),
+        totalPage: Math.ceil(total / pageSize),
         totalUsers: total,
         pageSize,
       },

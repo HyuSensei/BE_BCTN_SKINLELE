@@ -1,3 +1,4 @@
+import Brand from "../models/brand.model.js";
 import Category from "../models/category.model.js";
 import Product from "../models/product.model.js";
 import slugify from "slugify";
@@ -148,32 +149,244 @@ export const removeProduct = async (req, res) => {
   }
 };
 
+export const getPriceFilter = (priceRanges) => {
+  let priceFilters = [];
+  if (priceRanges.length > 0) {
+    const min = Math.floor(priceRanges[0].minPrice / 1000) * 1000;
+    const max = Math.ceil(priceRanges[0].maxPrice / 1000) * 1000;
+    const range = max - min;
+
+    let numRanges;
+    if (range <= 100000) {
+      numRanges = 1;
+    } else if (range <= 500000) {
+      numRanges = 2;
+    } else if (range <= 1000000) {
+      numRanges = 3;
+    } else if (range <= 5000000) {
+      numRanges = 4;
+    } else {
+      numRanges = 5;
+    }
+
+    const step = Math.ceil(range / numRanges / 10000) * 10000;
+
+    for (let i = min; i < max; i += step) {
+      priceFilters.push({
+        min: i,
+        max: Math.min(i + step, max),
+      });
+    }
+  }
+  return priceFilters;
+};
+
 export const getListFromCategory = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 12;
+    const pageSize = parseInt(req.query.pageSize) || 10;
     const { slug } = req.params;
+    const { priceRange, brands, sortOrder, tags, subcategoriesList } =
+      req.query;
     const category = await Category.findOne({ slug });
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Danh mục sản phẩm không tồn tại",
+        data: [],
+      });
+    }
+
+    let categoryIds = [];
+
+    if (subcategoriesList) {
+      categoryIds = subcategoriesList.split(",");
+    } else {
+      categoryIds.push(category._id);
+    }
+
+    let query = { categories: { $in: categoryIds }, enable: true };
+
+    if (priceRange) {
+      const [min, max] = priceRange.split("-").map(Number);
+      query.price = { $gte: min, $lte: max };
+    }
+
+    if (brands) {
+      const brandIds = await Brand.find({
+        slug: { $in: brands.split(",") },
+      }).distinct("_id");
+      query.brand = { $in: brandIds };
+    }
+
+    if (tags) {
+      query.tags = { $in: tags.split(",") };
+    }
+
     const skip = (page - 1) * pageSize;
 
+    let productQuery = Product.find(query);
+
+    if (sortOrder === "asc") {
+      productQuery = productQuery.sort({ price: 1 });
+    } else if (sortOrder === "desc") {
+      productQuery = productQuery.sort({ price: -1 });
+    }
+
     const [total, products] = await Promise.all([
-      Product.countDocuments({ category: category._id }),
-      Product.find({ category: category._id })
-        .skip(skip)
-        .limit(pageSize)
+      Product.countDocuments(query),
+      productQuery.skip(skip).limit(pageSize).populate("brand").lean().exec(),
+    ]);
+
+    const [priceRanges, allBrands, subcategories] = await Promise.all([
+      Product.aggregate([
+        { $match: { categories: { $in: categoryIds }, enable: true } },
+        {
+          $group: {
+            _id: null,
+            minPrice: { $min: "$price" },
+            maxPrice: { $max: "$price" },
+          },
+        },
+      ]),
+      Brand.find({
+        _id: {
+          $in: await Product.distinct("brand", {
+            categories: { $in: categoryIds },
+            enable: true,
+          }),
+        },
+      })
         .lean()
         .exec(),
+      Category.find({ parent: category._id }).lean().exec(),
     ]);
+
+    const priceFilters = getPriceFilter(priceRanges);
+
+    const filters = {
+      priceRanges: priceFilters,
+      brands: allBrands,
+      subcategories: subcategories,
+      tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
+    };
 
     return res.status(200).json({
       success: true,
       pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / pageSize),
+        page: page,
+        totalPage: Math.ceil(total / pageSize),
         totalItems: total,
         pageSize: pageSize,
       },
+      category: category.name,
       data: products,
+      filters: filters,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      data: [],
+      error: error.message,
+    });
+  }
+};
+
+export const getListFromBrand = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const { slug } = req.params;
+    const { priceRange, sortOrder, tags, categoriesList } = req.query;
+
+    const brand = await Brand.findOne({ slug });
+    if (!brand) {
+      return res.status(404).json({
+        success: false,
+        message: "Thương hiệu sản phẩm không tồn tại",
+        data: [],
+      });
+    }
+
+    let query = { brand: brand._id, enable: true };
+
+    if (priceRange) {
+      const [min, max] = priceRange.split("-").map(Number);
+      query.price = { $gte: min, $lte: max };
+    }
+
+    if (categoriesList) {
+      const categoryIds = categoriesList.split(",");
+      query.categories = { $in: categoryIds };
+    }
+
+    if (tags) {
+      query.tags = { $in: tags.split(",") };
+    }
+
+    const skip = (page - 1) * pageSize;
+
+    let productQuery = Product.find(query);
+    if (sortOrder === "asc") {
+      productQuery = productQuery.sort({ price: 1 });
+    } else if (sortOrder === "desc") {
+      productQuery = productQuery.sort({ price: -1 });
+    }
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(query),
+      productQuery
+        .skip(skip)
+        .limit(pageSize)
+        .populate("categories")
+        .lean()
+        .exec(),
+    ]);
+
+    const [priceRanges, relatedCategories] = await Promise.all([
+      Product.aggregate([
+        { $match: { brand: brand._id, enable: true } },
+        {
+          $group: {
+            _id: null,
+            minPrice: { $min: "$price" },
+            maxPrice: { $max: "$price" },
+          },
+        },
+      ]),
+      Category.find({
+        _id: {
+          $in: await Product.distinct("categories", {
+            brand: brand._id,
+            enable: true,
+          }),
+        },
+      })
+        .lean()
+        .exec(),
+    ]);
+
+    const priceFilters = getPriceFilter(priceRanges);
+
+    const filters = {
+      priceRanges: priceFilters,
+      categories: relatedCategories,
+      tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
+    };
+
+    return res.status(200).json({
+      success: true,
+      pagination: {
+        page: page,
+        totalPage: Math.ceil(total / pageSize),
+        totalItems: total,
+        pageSize: pageSize,
+      },
+      brand: brand.name,
+      data: products,
+      filters: filters,
     });
   } catch (error) {
     console.log(error);
@@ -300,7 +513,7 @@ export const getAllProduct = async (req, res) => {
     return res.status(200).json({
       success: true,
       pagination: {
-        currentPage: page,
+        page: page,
         totalPage: Math.ceil(total / pageSize),
         pageSize: pageSize,
         totalItems: total,
@@ -373,8 +586,8 @@ export const getProductPageSearch = async (req, res) => {
     return res.status(200).json({
       success: true,
       pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(total / pageSize),
+        page: page,
+        totalPage: Math.ceil(total / pageSize),
         pageSize: pageSize,
         totalItems: total,
       },

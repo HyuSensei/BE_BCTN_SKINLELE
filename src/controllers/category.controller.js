@@ -31,8 +31,8 @@ export const getAllCategory = async (req, res) => {
         success: true,
         data: categories,
         pagination: {
-          currentPage: pageNumber,
-          totalPages: Math.ceil(total / limitNumber),
+          page: pageNumber,
+          totalPage: Math.ceil(total / limitNumber),
           totalItems: total,
           pageSize: limitNumber,
         },

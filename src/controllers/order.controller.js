@@ -425,8 +425,8 @@ export const getOrderByUser = async (req, res) => {
       success: true,
       data: orders,
       pagination: {
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / pageSize),
+        page: Number(page),
+        totalPage: Math.ceil(total / pageSize),
         totalItems: total,
         pageSize,
       },
@@ -485,7 +485,7 @@ export const getOrderByAdmin = async (req, res) => {
       data: orders,
       pagination: {
         page: Number(page),
-        totalPages: Math.ceil(total / pageSize),
+        totalPage: Math.ceil(total / pageSize),
         totalItems: total,
       },
     });

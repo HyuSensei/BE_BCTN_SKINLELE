@@ -25,8 +25,8 @@ export const getAllBrand = async (req, res) => {
       };
       if (pageSize) {
         response.pagination = {
-          currentPage: pageNumber,
-          totalPages: Math.ceil(total / limitNumber),
+          page: pageNumber,
+          totalPage: Math.ceil(total / limitNumber),
           totalItems: total,
           pageSize: limitNumber,
         };
