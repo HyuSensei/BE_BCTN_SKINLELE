@@ -107,6 +107,10 @@ export const OrderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    cancelReason: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );

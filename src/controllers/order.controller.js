@@ -398,6 +398,48 @@ export const updateOrder = async (req, res) => {
   }
 };
 
+// export const getOrderByUser = async (req, res) => {
+//   try {
+//     const user = req.user;
+//     const page = parseInt(req.query.page) || 1;
+//     const pageSize = parseInt(req.query.pageSize) || 10;
+//     const { status } = req.query;
+//     const skip = (page - 1) * pageSize;
+
+//     let statusCondition;
+//     if (status === "pending") {
+//       statusCondition = { $in: ["pending", "processing"] };
+//     } else {
+//       statusCondition = status;
+//     }
+
+//     const [orders, total] = await Promise.all([
+//       Order.find({ user: user._id, status: statusCondition })
+//         .sort({ createdAt: -1 })
+//         .skip(skip)
+//         .limit(Number(pageSize)),
+//       Order.countDocuments({ user: user._id, status: statusCondition }),
+//     ]);
+
+//     res.status(200).json({
+//       success: true,
+//       data: orders,
+//       pagination: {
+//         page: Number(page),
+//         totalPage: Math.ceil(total / pageSize),
+//         totalItems: total,
+//         pageSize,
+//       },
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal Server Error",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const getOrderByUser = async (req, res) => {
   try {
     const user = req.user;
@@ -407,19 +449,49 @@ export const getOrderByUser = async (req, res) => {
     const skip = (page - 1) * pageSize;
 
     let statusCondition;
-    if (status === "pending") {
-      statusCondition = { $in: ["pending", "processing"] };
-    } else {
-      statusCondition = status;
+    switch (status) {
+      case "pending":
+        statusCondition = "pending";
+        break;
+      case "processing":
+        statusCondition = "processing";
+        break;
+      case "shipping":
+        statusCondition = "shipping";
+        break;
+      case "delivered":
+        statusCondition = "delivered";
+        break;
+      case "cancelled":
+        statusCondition = "cancelled";
+        break;
+      default:
+        statusCondition = { $in: ["pending", "processing", "shipping", "delivered", "cancelled"] };
     }
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, counts] = await Promise.all([
       Order.find({ user: user._id, status: statusCondition })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(pageSize)),
       Order.countDocuments({ user: user._id, status: statusCondition }),
+      Order.aggregate([
+        { $match: { user: user._id } },
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ])
     ]);
+
+    const statusCounts = {
+      pending: 0,
+      processing: 0,
+      shipping: 0,
+      delivered: 0,
+      cancelled: 0
+    };
+
+    counts.forEach(item => {
+      statusCounts[item._id] = item.count;
+    });
 
     res.status(200).json({
       success: true,
@@ -430,12 +502,14 @@ export const getOrderByUser = async (req, res) => {
         totalItems: total,
         pageSize,
       },
+      statusCounts
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
       error: error.message,
+      data:[]
     });
   }
 };

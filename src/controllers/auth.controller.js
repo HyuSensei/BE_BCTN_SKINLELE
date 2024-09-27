@@ -250,6 +250,7 @@ export const resetPassword = async (req, res) => {
 export const updateAccount = async (req, res) => {
   try {
     const { name, email, password, avatar } = req.body;
+    console.log(req.body);
     const user = await User.findOne({
       email,
     });
@@ -262,8 +263,8 @@ export const updateAccount = async (req, res) => {
 
     user.name = name || user.name;
     user.password = password || user.password;
-    user.avatar.url = avatar.url || user.url;
-    user.avatar.publicId = avatar.publicId || user.publicId;
+    user.avatar.url = avatar?.url || user.avatar.url;
+    user.avatar.publicId = avatar?.publicId || user.avatar.publicId;
     await user.save();
 
     return res.status(200).json({
