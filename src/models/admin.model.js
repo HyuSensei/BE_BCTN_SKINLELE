@@ -50,4 +50,21 @@ AdminSchema.pre("save", function (next) {
 
 const Admin = mongoose.model("Admin", AdminSchema);
 
+export const initializeAdmin = async () => {
+  const adminCount = await Admin.countDocuments();
+  if (adminCount === 0) {
+    const defaultAdmin = new Admin({
+      name: "Phan Tiến Huy",
+      username: "admin",
+      password: "admin123",
+      role: "ADMIN",
+      avatar: {
+        url: `https://avatar.iran.liara.run/username?username=Phan Tiến Huy}`,
+        publicId: "",
+      },
+    });
+    await defaultAdmin.save();
+  }
+};
+
 export default Admin;

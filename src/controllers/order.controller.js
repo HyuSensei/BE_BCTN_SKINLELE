@@ -558,8 +558,9 @@ export const getOrderByAdmin = async (req, res) => {
       success: true,
       data: orders,
       pagination: {
-        page: Number(page),
+        page,
         totalPage: Math.ceil(total / pageSize),
+        pageSize,
         totalItems: total,
       },
     });

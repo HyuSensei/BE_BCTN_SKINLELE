@@ -250,7 +250,6 @@ export const resetPassword = async (req, res) => {
 export const updateAccount = async (req, res) => {
   try {
     const { name, email, password, avatar } = req.body;
-    console.log(req.body);
     const user = await User.findOne({
       email,
     });
@@ -306,10 +305,11 @@ export const loginAdmin = async (req, res) => {
       success: true,
       accessToken: token,
       data: {
-        _id: admin._id,
-        name: admin.name,
-        username: admin.user,
-        role: admin.role,
+        id: adminDetails._id,
+        name: adminDetails.name,
+        username: adminDetails.username,
+        avatar: adminDetails.avatar,
+        role: adminDetails.role,
       },
     });
   } catch (error) {
@@ -324,7 +324,7 @@ export const loginAdmin = async (req, res) => {
 
 export const getAccountAdmin = async (req, res) => {
   try {
-    const adminDetails = await Admin.findById(req.admin._id).select(
+    const adminDetails = await Admin.findById(req.admin.id).select(
       "-password -__v"
     );
 
@@ -345,9 +345,10 @@ export const getAccountAdmin = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        _id: adminDetails._id,
+        id: adminDetails._id,
         name: adminDetails.name,
-        username: adminDetails.user,
+        username: adminDetails.username,
+        avatar: adminDetails.avatar,
         role: adminDetails.role,
       },
     });

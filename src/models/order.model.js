@@ -45,6 +45,10 @@ export const OrderSchema = new mongoose.Schema(
           type: Number,
           required: true,
         },
+        isReviewed: {
+          type: Boolean,
+          default: false,
+        },
       },
     ],
     status: {
