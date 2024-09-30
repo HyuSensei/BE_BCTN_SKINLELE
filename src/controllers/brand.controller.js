@@ -16,7 +16,12 @@ export const getAllBrand = async (req, res) => {
       const skip = (pageNumber - 1) * limitNumber;
       const filter = name ? { name: { $regex: name, $options: "i" } } : {};
       const [brands, total] = await Promise.all([
-        Brand.find(filter).skip(skip).limit(limitNumber).lean().exec(),
+        Brand.find(filter)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limitNumber)
+          .lean()
+          .exec(),
         Brand.countDocuments(filter),
       ]);
       let response = {
@@ -48,7 +53,10 @@ export const createBrand = async (req, res) => {
   try {
     const { name } = req.body;
 
-    const existingBrand = await Brand.findOne({ name });
+    const existingBrand = await Brand.findOne({
+      name: { $regex: new RegExp(`^${name}$`, "i") },
+    });
+
     if (existingBrand) {
       return res.status(400).json({
         success: false,
@@ -60,12 +68,12 @@ export const createBrand = async (req, res) => {
       name,
     });
 
-    const savedBrand = await newBrand.save();
+    const savedBrand = await newBrand.save({ validateBeforeSave: false });
 
     return res.status(201).json({
       success: true,
       message: "Tạo mới thương hiệu thành công",
-      brand: savedBrand,
+      data: savedBrand,
     });
   } catch (error) {
     console.error(error);
@@ -104,12 +112,12 @@ export const updateBrand = async (req, res) => {
       brand.slug = slugify(name, { lower: true, locale: "vi" });
     }
 
-    const updatedBrand = await brand.save();
+    const updatedBrand = await brand.save({ validateBeforeSave: false });
 
     return res.status(200).json({
       success: true,
       message: "Cập nhật thương hiệu thành công",
-      brand: updatedBrand,
+      data: updatedBrand,
     });
   } catch (error) {
     console.error(error);

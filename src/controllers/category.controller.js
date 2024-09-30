@@ -1,3 +1,4 @@
+import slugify from "slugify";
 import { buildCategoryTree } from "../helpers/buildCategoryTree.js";
 import Category from "../models/category.model.js";
 
@@ -86,12 +87,12 @@ export const createCategory = async (req, res) => {
       level,
     });
 
-    const savedCategory = await newCategory.save();
+    const savedCategory = await newCategory.save({ validateBeforeSave: false });
 
     return res.status(201).json({
       success: true,
       message: "Tạo mới danh mục thành công",
-      category: savedCategory,
+      data: savedCategory,
     });
   } catch (error) {
     console.error(error);
@@ -140,7 +141,7 @@ export const updateCategory = async (req, res) => {
       }
     }
 
-    const updatedCategory = await category.save();
+    const updatedCategory = await category.save({ validateBeforeSave: false });
 
     // Update levels of all child categories
     if (category.level !== updatedCategory.level) {
@@ -150,7 +151,7 @@ export const updateCategory = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Cập nhật danh mục thành công",
-      category: updatedCategory,
+      data: updatedCategory,
     });
   } catch (error) {
     console.error(error);
@@ -191,8 +192,7 @@ export const deleteCategory = async (req, res) => {
     if (childrenCount > 0 && deleteChildren !== "true") {
       return res.status(400).json({
         success: false,
-        message:
-          "Danh mục này có danh mục con. Vui lòng xác nhận xóa tất cả hoặc di chuyển chúng trước.",
+        message: "Danh mục này có danh mục con. Vui lòng xác nhận xóa tất",
       });
     }
 

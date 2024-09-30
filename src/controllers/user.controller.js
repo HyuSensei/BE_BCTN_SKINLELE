@@ -55,7 +55,7 @@ export const updateUser = async (req, res) => {
     const { id } = req.params;
     const { name, email, avatar, isActive } = req.body;
 
-    const user = await User.findById(id);
+    const user = await User.findById(id).select("-password -__v");
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -73,19 +73,42 @@ export const updateUser = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Cập nhật thông tin người dùng thành công",
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-        isActive: user.isActive,
-      },
+      data: user,
     });
   } catch (error) {
     console.error("Error in updateUser:", error);
     res.status(500).json({
       success: false,
       message: "Lỗi server khi cập nhật thông tin người dùng",
+      error: error.message,
+    });
+  }
+};
+
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy người dùng",
+      });
+    }
+
+    await User.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Xóa người dùng thành công",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy người dùng",
       error: error.message,
     });
   }
