@@ -365,7 +365,7 @@ export const orderStripeReturn = async (req, res) => {
     });
   } catch (error) {
     console.error("Lỗi xử lý đơn hàng Stripe:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Đã xảy ra lỗi khi xử lý thông tin đặt hàng",
       error: error.message,
@@ -378,67 +378,28 @@ export const updateOrder = async (req, res) => {
     const { id } = req.params;
     const data = req.body;
     const updatedOrder = await Order.findByIdAndUpdate(id, data, { new: true });
+
     if (!updatedOrder) {
       return res.status(404).json({
         success: false,
         message: "Đơn hàng không tồn tại",
       });
     }
-    res.status(200).json({
+
+    return res.status(200).json({
       success: true,
-      message: "Cập nhật trạng thái đơn hàng thành công",
+      message: "Cập nhật đơn hàng thành công",
       data: updatedOrder,
     });
   } catch (error) {
-    res.status(500).json({
+    console.log(error);
+    return res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi cập nhật trạng thái đơn hàng",
       error: error.message,
     });
   }
 };
-
-// export const getOrderByUser = async (req, res) => {
-//   try {
-//     const user = req.user;
-//     const page = parseInt(req.query.page) || 1;
-//     const pageSize = parseInt(req.query.pageSize) || 10;
-//     const { status } = req.query;
-//     const skip = (page - 1) * pageSize;
-
-//     let statusCondition;
-//     if (status === "pending") {
-//       statusCondition = { $in: ["pending", "processing"] };
-//     } else {
-//       statusCondition = status;
-//     }
-
-//     const [orders, total] = await Promise.all([
-//       Order.find({ user: user._id, status: statusCondition })
-//         .sort({ createdAt: -1 })
-//         .skip(skip)
-//         .limit(Number(pageSize)),
-//       Order.countDocuments({ user: user._id, status: statusCondition }),
-//     ]);
-
-//     res.status(200).json({
-//       success: true,
-//       data: orders,
-//       pagination: {
-//         page: Number(page),
-//         totalPage: Math.ceil(total / pageSize),
-//         totalItems: total,
-//         pageSize,
-//       },
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: "Internal Server Error",
-//       error: error.message,
-//     });
-//   }
-// };
 
 export const getOrderByUser = async (req, res) => {
   try {
@@ -466,7 +427,9 @@ export const getOrderByUser = async (req, res) => {
         statusCondition = "cancelled";
         break;
       default:
-        statusCondition = { $in: ["pending", "processing", "shipping", "delivered", "cancelled"] };
+        statusCondition = {
+          $in: ["pending", "processing", "shipping", "delivered", "cancelled"],
+        };
     }
 
     const [orders, total, counts] = await Promise.all([
@@ -477,8 +440,8 @@ export const getOrderByUser = async (req, res) => {
       Order.countDocuments({ user: user._id, status: statusCondition }),
       Order.aggregate([
         { $match: { user: user._id } },
-        { $group: { _id: "$status", count: { $sum: 1 } } }
-      ])
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
     ]);
 
     const statusCounts = {
@@ -486,10 +449,10 @@ export const getOrderByUser = async (req, res) => {
       processing: 0,
       shipping: 0,
       delivered: 0,
-      cancelled: 0
+      cancelled: 0,
     };
 
-    counts.forEach(item => {
+    counts.forEach((item) => {
       statusCounts[item._id] = item.count;
     });
 
@@ -502,14 +465,14 @@ export const getOrderByUser = async (req, res) => {
         totalItems: total,
         pageSize,
       },
-      statusCounts
+      statusCounts,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Internal Server Error",
       error: error.message,
-      data:[]
+      data: [],
     });
   }
 };
@@ -540,8 +503,8 @@ export const getOrderByAdmin = async (req, res) => {
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
-        { "user.name": { $regex: search, $options: "i" } },
         { "user.email": { $regex: search, $options: "i" } },
+        { _id: search },
       ];
     }
 
@@ -554,7 +517,7 @@ export const getOrderByAdmin = async (req, res) => {
       Order.countDocuments(filter),
     ]);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: orders,
       pagination: {
@@ -577,21 +540,22 @@ export const removeOrder = async (req, res) => {
   try {
     const { id } = req.params;
     const deletedOrder = await Order.findByIdAndDelete(id);
+
     if (!deletedOrder) {
       return res.status(404).json({
         success: false,
         message: "Đơn hàng không tồn tại",
       });
     }
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Xóa đơn hàng thành công",
       data: deletedOrder,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Internal Server Error",
+      message: "Có lỗi khi xóa đơn hàng",
       error: error.message,
     });
   }
@@ -607,12 +571,12 @@ export const getOrderDetails = async (req, res) => {
         message: "Đơn hàng không tồn tại",
       });
     }
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: order,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Internal Server Error",
       error: error.message,
