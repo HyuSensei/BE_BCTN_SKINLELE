@@ -301,15 +301,15 @@ export const loginAdmin = async (req, res) => {
     }
 
     const token = generateTokenAdmin(admin);
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       accessToken: token,
       data: {
-        id: adminDetails._id,
-        name: adminDetails.name,
-        username: adminDetails.username,
-        avatar: adminDetails.avatar,
-        role: adminDetails.role,
+        id: admin._id,
+        name: admin.name,
+        username: admin.username,
+        avatar: admin.avatar,
+        role: admin.role,
       },
     });
   } catch (error) {

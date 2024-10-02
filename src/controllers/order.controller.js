@@ -401,6 +401,46 @@ export const updateOrder = async (req, res) => {
   }
 };
 
+export const updateOrderByUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id);
+    const { status, name, province, district, ward, phone, address } = req.body;
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Đơn hàng không tồn tại",
+      });
+    }
+
+    Object.assign(order, {
+      ...(status && { status }),
+      ...(name && { name }),
+      ...(province?.id && { province }),
+      ...(district?.id && { district }),
+      ...(ward?.id && { ward }),
+      ...(phone && { phone }),
+      ...(address && { address }),
+    });
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật đơn hàng thành công",
+      data: order,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi cập nhật đơn hàng",
+      error: error.message,
+    });
+  }
+};
+
 export const getOrderByUser = async (req, res) => {
   try {
     const user = req.user;

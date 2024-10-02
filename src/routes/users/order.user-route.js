@@ -8,7 +8,7 @@ import {
   createOrderVnpay,
   orderStripeReturn,
   orderVnpayReturn,
-  updateOrder,
+  updateOrderByUser,
 } from "../../controllers/order.controller.js";
 
 const router = express.Router();
@@ -28,7 +28,7 @@ router.post(
 );
 router.post("/vnpay-return", authMiddlewareUser, orderVnpayReturn);
 router.get("/stripe-return", authMiddlewareUser, orderStripeReturn);
-router.put("/status/:id", authMiddlewareUser, updateOrder);
+router.put("/:id", authMiddlewareUser, updateOrderByUser);
 router.get("/", authMiddlewareUser, getOrderByUser);
 
 export default router;

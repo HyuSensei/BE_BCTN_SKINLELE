@@ -115,6 +115,15 @@ export const OrderSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    codeShip: {
+      type: String,
+      default: "",
+    },
+    ship: {
+      type: String,
+      enum: ["normal", "express"],
+      default: "normal",
+    },
   },
   { timestamps: true }
 );
