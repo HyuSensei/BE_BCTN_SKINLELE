@@ -543,8 +543,7 @@ export const getOrderByAdmin = async (req, res) => {
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
-        { "user.email": { $regex: search, $options: "i" } },
-        { _id: search },
+        { "user.email": { $regex: search, $options: "i" } }
       ];
     }
 
@@ -568,7 +567,8 @@ export const getOrderByAdmin = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.log(error);
+    return res.status(500).json({
       success: false,
       message: "Internal Server Error",
       error: error.message,
