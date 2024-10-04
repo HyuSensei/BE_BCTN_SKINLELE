@@ -623,3 +623,86 @@ export const getOrderDetails = async (req, res) => {
     });
   }
 };
+
+export const updateStatusOrderByUser = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { status, cancelReason } = req.body;
+
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Đơn hàng không tồn tại",
+      });
+    }
+
+    switch (status) {
+      case "cancelled":
+        if (order.paymentMethod !== "COD") {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Đơn hàng đã thanh toán không thể hủy, xin lỗi quý khách hàng !",
+          });
+        }
+
+        if (order.status !== "pending" && order.status !== "processing") {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Đơn hàng đã xử lý không thể hủy, xin lỗi quý khách hàng !",
+          });
+        }
+
+        order.status = "cancelled";
+        order.cancelReason = cancelReason || "";
+        break;
+
+      case "delivered":
+        if (order.status !== "shipping") {
+          return res.status(400).json({
+            success: false,
+            message: "Đơn hàng chưa được giao không thể hoàn thành",
+          });
+        }
+
+        order.status = "delivered";
+        break;
+
+      case "pending":
+        if (order.status !== "cancelled") {
+          return res.status(400).json({
+            success: false,
+            message: "Chỉ có thể mua lại đơn hàng đã hủy",
+          });
+        }
+
+        order.status = "pending";
+        order.cancelReason = "";
+        break;
+
+      default:
+        return res.status(400).json({
+          success: false,
+          message: "Trạng thái đơn hàng không hợp lệ",
+        });
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Cập nhật đơn hàng thành công`,
+      order,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi cập nhật đơn hàng",
+      error: error.message,
+    });
+  }
+};

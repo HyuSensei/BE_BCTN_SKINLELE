@@ -1,7 +1,6 @@
 import Review from "../models/review.model.js";
 import Product from "../models/product.model.js";
 import Order from "../models/order.model.js";
-import User from "../models/user.model.js";
 
 export const createReview = async (req, res) => {
   try {
@@ -61,7 +60,7 @@ export const createReview = async (req, res) => {
 
     const newReview = await Review.create(reviewData);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Đánh giá sản phẩm thành công",
       data: newReview,
@@ -74,6 +73,7 @@ export const createReview = async (req, res) => {
     });
   }
 };
+
 
 export const updateReview = async (req, res) => {
   try {

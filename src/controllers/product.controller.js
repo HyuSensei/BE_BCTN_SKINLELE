@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Brand from "../models/brand.model.js";
 import Category from "../models/category.model.js";
 import Product from "../models/product.model.js";
@@ -188,6 +189,7 @@ export const getListFromCategory = async (req, res) => {
     const { slug } = req.params;
     const { priceRange, brands, sortOrder, tags, subcategoriesList } =
       req.query;
+
     const category = await Category.findOne({ slug });
     if (!category) {
       return res.status(404).json({
@@ -205,42 +207,80 @@ export const getListFromCategory = async (req, res) => {
       categoryIds.push(category._id);
     }
 
-    let query = { categories: { $in: categoryIds }, enable: true };
+    let matchStage = {
+      categories: {
+        $in: categoryIds.map((id) => new mongoose.Types.ObjectId(id)),
+      },
+      enable: true,
+    };
 
     if (priceRange) {
       const [min, max] = priceRange.split("-").map(Number);
-      query.price = { $gte: min, $lte: max };
+      matchStage.price = { $gte: min, $lte: max };
     }
 
     if (brands) {
       const brandIds = await Brand.find({
         slug: { $in: brands.split(",") },
       }).distinct("_id");
-      query.brand = { $in: brandIds };
+      matchStage.brand = { $in: brandIds };
     }
 
     if (tags) {
-      query.tags = { $in: tags.split(",") };
+      matchStage.tags = { $in: tags.split(",") };
     }
 
-    const skip = (page - 1) * pageSize;
-
-    let productQuery = Product.find(query);
-
+    let sortStage = {};
     if (sortOrder === "asc") {
-      productQuery = productQuery.sort({ price: 1 });
+      sortStage = { price: 1 };
     } else if (sortOrder === "desc") {
-      productQuery = productQuery.sort({ price: -1 });
+      sortStage = { price: -1 };
     }
 
-    const [total, products] = await Promise.all([
-      Product.countDocuments(query),
-      productQuery.skip(skip).limit(pageSize).populate("brand").lean().exec(),
-    ]);
+    const aggregationPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "_id",
+          foreignField: "product",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          totalReviews: { $size: "$reviews" },
+          averageRating: { $avg: "$reviews.rate" },
+        },
+      },
+      { $project: { reviews: 0 } },
+      { $sort: sortStage },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+        },
+      },
+    ];
+
+    const [result] = await Product.aggregate(aggregationPipeline);
+
+    const total = result.metadata[0]?.total || 0;
+    const products = result.data;
+
+    // Populate brand information
+    await Product.populate(products, { path: "brand" });
 
     const [priceRanges, allBrands, subcategories] = await Promise.all([
       Product.aggregate([
-        { $match: { categories: { $in: categoryIds }, enable: true } },
+        {
+          $match: {
+            categories: {
+              $in: categoryIds.map((id) => new mongoose.Types.ObjectId(id)),
+            },
+            enable: true,
+          },
+        },
         {
           $group: {
             _id: null,
@@ -280,7 +320,13 @@ export const getListFromCategory = async (req, res) => {
         pageSize: pageSize,
       },
       category: category.name,
-      data: products,
+      data: products.map((product) => ({
+        ...product,
+        totalReviews: product.totalReviews || 0,
+        averageRating: product.averageRating
+          ? Number(product.averageRating.toFixed(1))
+          : 0,
+      })),
       filters: filters,
     });
   } catch (error) {
@@ -310,40 +356,63 @@ export const getListFromBrand = async (req, res) => {
       });
     }
 
-    let query = { brand: brand._id, enable: true };
+    let matchStage = { brand: brand._id, enable: true };
 
     if (priceRange) {
       const [min, max] = priceRange.split("-").map(Number);
-      query.price = { $gte: min, $lte: max };
+      matchStage.price = { $gte: min, $lte: max };
     }
 
     if (categoriesList) {
-      const categoryIds = categoriesList.split(",");
-      query.categories = { $in: categoryIds };
+      const categoryIds = categoriesList
+        .split(",")
+        .map((id) => new mongoose.Types.ObjectId(id));
+      matchStage.categories = { $in: categoryIds };
     }
 
     if (tags) {
-      query.tags = { $in: tags.split(",") };
+      matchStage.tags = { $in: tags.split(",") };
     }
 
-    const skip = (page - 1) * pageSize;
-
-    let productQuery = Product.find(query);
+    let sortStage = {};
     if (sortOrder === "asc") {
-      productQuery = productQuery.sort({ price: 1 });
+      sortStage = { price: 1 };
     } else if (sortOrder === "desc") {
-      productQuery = productQuery.sort({ price: -1 });
+      sortStage = { price: -1 };
     }
 
-    const [total, products] = await Promise.all([
-      Product.countDocuments(query),
-      productQuery
-        .skip(skip)
-        .limit(pageSize)
-        .populate("categories")
-        .lean()
-        .exec(),
-    ]);
+    const aggregationPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "_id",
+          foreignField: "product",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          totalReviews: { $size: "$reviews" },
+          averageRating: { $avg: "$reviews.rate" },
+        },
+      },
+      { $project: { reviews: 0 } },
+      { $sort: sortStage },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+        },
+      },
+    ];
+
+    const [result] = await Product.aggregate(aggregationPipeline);
+
+    const total = result.metadata[0]?.total || 0;
+    const products = result.data;
+
+    await Product.populate(products, { path: "categories" });
 
     const [priceRanges, relatedCategories] = await Promise.all([
       Product.aggregate([
@@ -385,7 +454,13 @@ export const getListFromBrand = async (req, res) => {
         pageSize: pageSize,
       },
       brand: brand.name,
-      data: products,
+      data: products.map((product) => ({
+        ...product,
+        totalReviews: product.totalReviews || 0,
+        averageRating: product.averageRating
+          ? Number(product.averageRating.toFixed(1))
+          : 0,
+      })),
       filters: filters,
     });
   } catch (error) {
@@ -422,15 +497,34 @@ export const getProductHome = async (req, res) => {
     const productsByTag = [];
 
     for (const tag of tagList) {
-      const products = await Product.find({
-        tags: tag,
-        _id: { $nin: Array.from(usedProductIds) },
-      })
-        .populate({ path: "categories", select: "name" })
-        .populate({ path: "brand", select: "name" })
-        .limit(10)
-        .lean()
-        .exec();
+      const products = await Product.aggregate([
+        { $match: { tags: tag, _id: { $nin: Array.from(usedProductIds) } } },
+        {
+          $lookup: {
+            from: "reviews",
+            localField: "_id",
+            foreignField: "product",
+            as: "reviews",
+          },
+        },
+        {
+          $addFields: {
+            totalReviews: { $size: "$reviews" },
+            averageRating: { $avg: "$reviews.rate" },
+          },
+        },
+        {
+          $project: {
+            reviews: 0,
+          },
+        },
+        { $limit: 10 },
+      ]);
+
+      await Product.populate(products, [
+        { path: "categories", select: "name" },
+        { path: "brand", select: "name" },
+      ]);
 
       products.forEach((product) => usedProductIds.add(product._id.toString()));
 
@@ -452,7 +546,13 @@ export const getProductHome = async (req, res) => {
       productsByTag.push({
         tag,
         title,
-        products,
+        products: products.map((product) => ({
+          ...product,
+          totalReviews: product.totalReviews || 0,
+          averageRating: product.averageRating
+            ? Number(product.averageRating.toFixed(1))
+            : 0,
+        })),
       });
     }
 
@@ -598,6 +698,82 @@ export const getProductPageSearch = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
+      data: [],
+      error: error.message,
+    });
+  }
+};
+
+export const getAllProductByUser = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const sortField = req.query.sortField || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const aggregationPipeline = [
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "_id",
+          foreignField: "product",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          totalReviews: { $size: "$reviews" },
+          averageRating: { $avg: "$reviews.rate" },
+        },
+      },
+      {
+        $project: {
+          reviews: 0,
+        },
+      },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [
+            { $sort: { [sortField]: sortOrder } },
+            { $skip: (page - 1) * pageSize },
+            { $limit: pageSize },
+          ],
+        },
+      },
+    ];
+
+    const [result] = await Product.aggregate(aggregationPipeline);
+
+    const products = result.data;
+    const totalProducts = result.metadata[0]?.total || 0;
+
+    await Product.populate(products, [
+      { path: "categories", select: "name" },
+      { path: "brand", select: "name" },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: products.map((product) => ({
+        ...product,
+        totalReviews: product.totalReviews || 0,
+        averageRating: product.averageRating
+          ? Number(product.averageRating.toFixed(1))
+          : 0,
+      })),
+      pagination: {
+        page: page,
+        totalPage: Math.ceil(totalProducts / pageSize),
+        totalItems: totalProducts,
+        pageSize: pageSize,
+      },
+    });
+  } catch (error) {
+    console.error("Error in getAllProductByUser:", error);
+    res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi lấy danh sách sản phẩm",
       data: [],
       error: error.message,
     });

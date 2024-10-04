@@ -9,6 +9,7 @@ import {
   orderStripeReturn,
   orderVnpayReturn,
   updateOrderByUser,
+  updateStatusOrderByUser,
 } from "../../controllers/order.controller.js";
 
 const router = express.Router();
@@ -30,5 +31,6 @@ router.post("/vnpay-return", authMiddlewareUser, orderVnpayReturn);
 router.get("/stripe-return", authMiddlewareUser, orderStripeReturn);
 router.put("/:id", authMiddlewareUser, updateOrderByUser);
 router.get("/", authMiddlewareUser, getOrderByUser);
+router.put("/status/:id", authMiddlewareUser, updateStatusOrderByUser);
 
 export default router;
