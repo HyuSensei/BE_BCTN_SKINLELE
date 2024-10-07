@@ -89,6 +89,14 @@ export const ProductSchema = new mongoose.Schema(
         enum: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
       },
     ],
+    expiry: {
+      type: Date,
+      required: true,
+    },
+    isAlmostExpired: {
+      type: Date,
+      default: false,
+    },
     capacity: {
       type: String,
       default: "",

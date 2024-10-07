@@ -7,7 +7,7 @@ const connectDabase = async () => {
       dbName: process.env.DB_NAME,
     });
     initializeAdmin();
-    console.log("------------------Database connected---------------");
+    console.log("🌐------------------Database connected---------------🌐");
   } catch (error) {
     console.log(error);
   }

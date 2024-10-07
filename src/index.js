@@ -113,5 +113,5 @@ app.use("/api/v1/admin", adminRoutes);
 
 app.listen(PORT, async () => {
   await connectDabase();
-  console.log(`-------------SERVER RUN PORT ${PORT}-------------`);
+  console.log(`🚀-------------SERVER RUN PORT ${PORT}-------------🚀`);
 });

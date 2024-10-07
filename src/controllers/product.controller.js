@@ -18,6 +18,7 @@ export const createProduct = async (req, res) => {
       tags,
       enable,
       capacity,
+      expiry,
     } = req.body;
 
     const existingProduct = await Product.findOne({ name }).lean();
@@ -39,6 +40,7 @@ export const createProduct = async (req, res) => {
       variants,
       tags,
       enable,
+      expiry: new Date(expiry),
       capacity,
     });
 
@@ -72,6 +74,7 @@ export const updateProduct = async (req, res) => {
       mainImage,
       variants,
       tags,
+      expiry,
       enable,
     } = req.body;
     const updateData = {
@@ -84,6 +87,7 @@ export const updateProduct = async (req, res) => {
       mainImage,
       variants,
       tags,
+      expiry: new Date(expiry),
       enable,
     };
 

@@ -11,20 +11,29 @@ import {
   updateOrderByUser,
   updateStatusOrderByUser,
 } from "../../controllers/order.controller.js";
+import { validateMiddleWare } from "../../middleware/validate.middleware.js";
 
 const router = express.Router();
 
-router.post("/cod", authMiddlewareUser, createOrderValidate, createOrderCod);
+router.post(
+  "/cod",
+  authMiddlewareUser,
+  createOrderValidate,
+  validateMiddleWare,
+  createOrderCod
+);
 router.post(
   "/vnpay",
   authMiddlewareUser,
   createOrderValidate,
+  validateMiddleWare,
   createOrderVnpay
 );
 router.post(
   "/stripe",
   authMiddlewareUser,
   createOrderValidate,
+  validateMiddleWare,
   createOrderStripe
 );
 router.post("/vnpay-return", authMiddlewareUser, orderVnpayReturn);
