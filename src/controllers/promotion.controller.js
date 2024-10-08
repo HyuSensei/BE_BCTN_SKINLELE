@@ -1,6 +1,31 @@
 import Promotion from "../models/promotion.model.js";
 import Product from "../models/product.model.js";
 
+export const getDetailPromotion = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const promtion = await Promotion.findById(id);
+    if (!promtion) {
+      return res.status(404).json({
+        success: false,
+        message: "Khuyến mãi không tồn tại",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: promtion,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      data: {},
+      error: error.message,
+    });
+  }
+};
+
 export const getAllPromotions = async (req, res) => {
   try {
     const { startDate, endDate, page = 1, pageSize = 10 } = req.query;
@@ -15,10 +40,10 @@ export const getAllPromotions = async (req, res) => {
     const skip = (page - 1) * pageSize;
 
     const promotions = await Promotion.find(query)
-      .sort({ discountPercentage: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(pageSize))
-      .populate("products", "name price");
+      .populate("products.product", "name price");
 
     const total = await Promotion.countDocuments(query);
 
@@ -44,22 +69,15 @@ export const getAllPromotions = async (req, res) => {
 
 export const createPromotion = async (req, res) => {
   try {
-    const {
-      name,
-      description,
-      discountPercentage,
-      startDate,
-      endDate,
-      isActive,
-      maxQty,
-      products,
-    } = req.body;
+    const { name, description, startDate, endDate, isActive, products } =
+      req.body;
 
     if (products && products.length > 0) {
+      const productIds = products.map((p) => p.product);
       const productCount = await Product.countDocuments({
-        _id: { $in: products },
+        _id: { $in: productIds },
       });
-      if (productCount !== products.length) {
+      if (productCount !== productIds.length) {
         return res.status(400).json({
           success: false,
           message: "Một số sản phẩm không tồn tại",
@@ -70,12 +88,14 @@ export const createPromotion = async (req, res) => {
     const newPromotion = new Promotion({
       name,
       description,
-      discountPercentage,
-      startDate,
-      endDate,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
       isActive,
-      maxQty,
-      products,
+      products: products.map((item) => ({
+        product: item.product,
+        discountPercentage: item.discountPercentage,
+        maxQty: item.maxQty,
+      })),
     });
 
     const savedPromotion = await newPromotion.save();
@@ -98,16 +118,8 @@ export const createPromotion = async (req, res) => {
 export const updatePromotion = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      name,
-      description,
-      discountPercentage,
-      startDate,
-      endDate,
-      isActive,
-      maxQty,
-      products,
-    } = req.body;
+    const { name, description, startDate, endDate, isActive, products } =
+      req.body;
 
     const promotion = await Promotion.findById(id);
 
@@ -119,10 +131,11 @@ export const updatePromotion = async (req, res) => {
     }
 
     if (products && products.length > 0) {
+      const productIds = products.map((p) => p.product);
       const productCount = await Product.countDocuments({
-        _id: { $in: products },
+        _id: { $in: productIds },
       });
-      if (productCount !== products.length) {
+      if (productCount !== productIds.length) {
         return res.status(400).json({
           success: false,
           message: "Một số sản phẩm không tồn tại",
@@ -132,13 +145,18 @@ export const updatePromotion = async (req, res) => {
 
     promotion.name = name || promotion.name;
     promotion.description = description || promotion.description;
-    promotion.discountPercentage =
-      discountPercentage || promotion.discountPercentage;
-    promotion.startDate = startDate || promotion.startDate;
-    promotion.endDate = endDate || promotion.endDate;
+    promotion.startDate = startDate ? new Date(startDate) : promotion.startDate;
+    promotion.endDate = endDate ? new Date(endDate) : promotion.endDate;
     promotion.isActive = isActive !== undefined ? isActive : promotion.isActive;
-    promotion.maxQty = maxQty || promotion.maxQty;
-    promotion.products = products || promotion.products;
+
+    if (products) {
+      promotion.products = products.map((p) => ({
+        product: p.product,
+        discountPercentage: p.discountPercentage,
+        maxQty: p.maxQty,
+        usedQty: p.usedQty || 0,
+      }));
+    }
 
     const updatedPromotion = await promotion.save();
 
@@ -180,7 +198,7 @@ export const deletePromotion = async (req, res) => {
     console.log(error);
     return res.status(500).json({
       success: false,
-      message: "Có lỗi xả ra khi xóa khuyến mãi",
+      message: "Có lỗi xảy ra khi xóa khuyến mãi",
       error: error.message,
     });
   }

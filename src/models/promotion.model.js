@@ -10,12 +10,6 @@ const PromotionSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    discountPercentage: {
-      type: Number,
-      required: true,
-      min: 0,
-      max: 100,
-    },
     startDate: {
       type: Date,
       required: true,
@@ -28,19 +22,25 @@ const PromotionSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    maxQty: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-    usedQty: {
-      type: Number,
-      default: 0,
-    },
     products: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+        },
+        discountPercentage: {
+          type: Number,
+          min: 0,
+          max: 100,
+        },
+        maxQty: {
+          type: Number,
+          min: 1,
+        },
+        usedQty: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
   },
