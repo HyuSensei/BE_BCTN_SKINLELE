@@ -3,6 +3,7 @@ import Brand from "../models/brand.model.js";
 import Category from "../models/category.model.js";
 import Product from "../models/product.model.js";
 import slugify from "slugify";
+import Promotion from "../models/promotion.model.js";
 
 export const createProduct = async (req, res) => {
   try {
@@ -877,4 +878,71 @@ const productFields = {
   enable: 1,
   tags: 1,
   capacity: 1,
+};
+
+export const getProductByPromotionAdd = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 12;
+    const { name, sort } = req.query;
+    const skip = (page - 1) * pageSize;
+
+    let filter = {};
+    if (name) {
+      filter.name = { $regex: name, $options: "i" };
+    }
+
+    let sortOption = {};
+    if (sort === "asc") {
+      sortOption = { price: 1 };
+    } else if (sort === "desc") {
+      sortOption = { price: -1 };
+    }
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .populate({ path: "categories", select: "name" })
+        .populate({ path: "brand", select: "name" })
+        .sort(sortOption)
+        .skip(skip)
+        .limit(pageSize)
+        .lean(),
+    ]);
+
+    const currentDate = new Date();
+    const activeAndFuturePromotions = await Promotion.find({
+      endDate: { $gte: currentDate },
+    }).lean();
+
+    const promotedProductIds = new Set(
+      activeAndFuturePromotions.flatMap((promo) =>
+        promo.products.map((p) => p.product.toString())
+      )
+    );
+
+    const productsWithPromotionStatus = products.map((product) => ({
+      ...product,
+      isPromotion: promotedProductIds.has(product._id.toString()),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      pagination: {
+        page: page,
+        totalPage: Math.ceil(total / pageSize),
+        pageSize: pageSize,
+        totalItems: total,
+      },
+      data: productsWithPromotionStatus,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      data: [],
+      error: error.message,
+    });
+  }
 };
