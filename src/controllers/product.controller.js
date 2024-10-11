@@ -915,16 +915,36 @@ export const getProductByPromotionAdd = async (req, res) => {
       endDate: { $gte: currentDate },
     }).lean();
 
-    const promotedProductIds = new Set(
-      activeAndFuturePromotions.flatMap((promo) =>
-        promo.products.map((p) => p.product.toString())
-      )
-    );
+    const promotionMap = new Map();
+    activeAndFuturePromotions.forEach((promo) => {
+      promo.products.forEach((p) => {
+        promotionMap.set(p.product.toString(), {
+          promotionId: promo._id,
+          promotionName: promo.name,
+          discountPercentage: p.discountPercentage,
+          maxQty: p.maxQty,
+          startDate: promo.startDate,
+          endDate: promo.endDate,
+        });
+      });
+    });
 
-    const productsWithPromotionStatus = products.map((product) => ({
-      ...product,
-      isPromotion: promotedProductIds.has(product._id.toString()),
-    }));
+    const productsWithPromotionInfo = products.map((product) => {
+      const promotionInfo = promotionMap.get(product._id.toString());
+      return {
+        ...product,
+        promotion: promotionInfo
+          ? {
+              id: promotionInfo.promotionId,
+              name: promotionInfo.promotionName,
+              discountPercentage: promotionInfo.discountPercentage,
+              maxQty: promotionInfo.maxQty,
+              startDate: promotionInfo.startDate,
+              endDate: promotionInfo.endDate,
+            }
+          : null,
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -934,7 +954,272 @@ export const getProductByPromotionAdd = async (req, res) => {
         pageSize: pageSize,
         totalItems: total,
       },
-      data: productsWithPromotionStatus,
+      data: productsWithPromotionInfo,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      data: [],
+      error: error.message,
+    });
+  }
+};
+
+export const getProductPromotion = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const { priceRange, brands, sortOrder, tags, categoriesList } = req.query;
+
+    const currentDate = new Date();
+
+    let matchStage = {
+      enable: true,
+    };
+
+    if (categoriesList) {
+      const categoryIds = categoriesList
+        .split(",")
+        .map((id) => new mongoose.Types.ObjectId(id));
+      matchStage.categories = { $in: categoryIds };
+    }
+
+    if (brands) {
+      const brandIds = await Brand.find({
+        slug: { $in: brands.split(",") },
+      }).distinct("_id");
+      matchStage.brand = { $in: brandIds };
+    }
+
+    if (tags) {
+      matchStage.tags = { $in: tags.split(",") };
+    }
+
+    let sortStage = {};
+    if (sortOrder === "asc") {
+      sortStage = { discountedPrice: 1 };
+    } else if (sortOrder === "desc") {
+      sortStage = { discountedPrice: -1 };
+    } else {
+      sortStage = { "promotion.discountPercentage": -1 };
+    }
+
+    const promotionLookupStage = {
+      $lookup: {
+        from: "promotions",
+        let: { productId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $in: ["$$productId", "$products.product"] },
+                  { $lte: ["$startDate", currentDate] },
+                  { $gte: ["$endDate", currentDate] },
+                  { $eq: ["$isActive", true] },
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              name: 1,
+              startDate: 1,
+              endDate: 1,
+              products: {
+                $filter: {
+                  input: "$products",
+                  as: "product",
+                  cond: { $eq: ["$$product.product", "$$productId"] },
+                },
+              },
+            },
+          },
+        ],
+        as: "promotionInfo",
+      },
+    };
+
+    const addPromotionFieldsStage = {
+      $addFields: {
+        promotionData: { $arrayElemAt: ["$promotionInfo", 0] },
+        productPromotion: { $arrayElemAt: ["$promotionInfo.products", 0] },
+        discountedPrice: {
+          $cond: {
+            if: { $gt: [{ $size: "$promotionInfo" }, 0] },
+            then: {
+              $let: {
+                vars: {
+                  discountPercentage: {
+                    $arrayElemAt: [
+                      "$promotionInfo.products.discountPercentage",
+                      0,
+                    ],
+                  },
+                },
+                in: {
+                  $round: [
+                    {
+                      $subtract: [
+                        "$price",
+                        {
+                          $multiply: [
+                            "$price",
+                            {
+                              $divide: [
+                                { $arrayElemAt: ["$$discountPercentage", 0] },
+                                100,
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+            else: "$price",
+          },
+        },
+      },
+    };
+
+    // Apply price range filter after calculating discounted price
+    if (priceRange) {
+      const [min, max] = priceRange.split("-").map(Number);
+      matchStage.discountedPrice = { $gte: min, $lte: max };
+    }
+
+    const aggregationPipeline = [
+      promotionLookupStage,
+      { $match: { promotionInfo: { $ne: [] } } },
+      addPromotionFieldsStage,
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brandInfo",
+        },
+      },
+      { $unwind: "$brandInfo" },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "categories",
+          foreignField: "_id",
+          as: "categoriesInfo",
+        },
+      },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "_id",
+          foreignField: "product",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          totalReviews: { $size: "$reviews" },
+          averageRating: { $avg: "$reviews.rate" },
+          promotion: {
+            id: "$promotionData._id",
+            name: "$promotionData.name",
+            discountPercentage: {
+              $arrayElemAt: ["$productPromotion.discountPercentage", 0],
+            },
+            maxQty: { $arrayElemAt: ["$productPromotion.maxQty", 0] },
+            startDate: "$promotionData.startDate",
+            endDate: "$promotionData.endDate",
+          },
+        },
+      },
+      {
+        $project: {
+          reviews: 0,
+          promotionInfo: 0,
+          promotionData: 0,
+          productPromotion: 0,
+        },
+      },
+      { $sort: sortStage },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+          allCategories: [
+            { $unwind: "$categoriesInfo" },
+            {
+              $group: {
+                _id: "$categoriesInfo._id",
+                name: { $first: "$categoriesInfo.name" },
+                slug: { $first: "$categoriesInfo.slug" },
+              },
+            },
+          ],
+          allBrands: [
+            {
+              $group: {
+                _id: "$brandInfo._id",
+                name: { $first: "$brandInfo.name" },
+                slug: { $first: "$brandInfo.slug" },
+              },
+            },
+          ],
+          priceRanges: [
+            {
+              $group: {
+                _id: null,
+                minPrice: { $min: "$discountedPrice" },
+                maxPrice: { $max: "$discountedPrice" },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const [result] = await Product.aggregate(aggregationPipeline);
+
+    const total = result.metadata[0]?.total || 0;
+    const products = result.data;
+    const allCategories = result.allCategories;
+    const allBrands = result.allBrands;
+    const priceRanges = result.priceRanges[0] || { minPrice: 0, maxPrice: 0 };
+
+    const priceFilters = getPriceFilter([priceRanges]);
+
+    const filters = {
+      priceRanges: priceFilters,
+      brands: allBrands,
+      categories: allCategories,
+      tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
+    };
+
+    return res.status(200).json({
+      success: true,
+      pagination: {
+        page: page,
+        totalPage: Math.ceil(total / pageSize),
+        totalItems: total,
+        pageSize: pageSize,
+      },
+      data: products.map((product) => ({
+        ...product,
+        totalReviews: product.totalReviews || 0,
+        averageRating: product.averageRating
+          ? Number(product.averageRating.toFixed(1))
+          : 0,
+        price: product.discountedPrice,
+      })),
+      filters: filters,
     });
   } catch (error) {
     console.log(error);

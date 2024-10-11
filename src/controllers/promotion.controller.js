@@ -4,8 +4,8 @@ import Product from "../models/product.model.js";
 export const getDetailPromotion = async (req, res) => {
   try {
     const id = req.params.id;
-    const promtion = await Promotion.findById(id);
-    if (!promtion) {
+    const promotion = await Promotion.findById(id);
+    if (!promotion) {
       return res.status(404).json({
         success: false,
         message: "Khuyến mãi không tồn tại",
@@ -14,7 +14,7 @@ export const getDetailPromotion = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: promtion,
+      data: promotion,
     });
   } catch (error) {
     console.log(error);

@@ -7,6 +7,7 @@ import {
   getProductSearch,
   getListFromBrand,
   getAllProductByUser,
+  getProductPromotion,
 } from "../../controllers/product.controller.js";
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.get("/detail/:slug", getProductDetailBySlug);
 router.get("/home", getProductHome);
 router.get("/search-page", getProductPageSearch);
 router.get("/all-other", getAllProductByUser);
+router.get("/promotions", getProductPromotion);
 
 export default router;
