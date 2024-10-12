@@ -3,9 +3,18 @@ import { initializeAdmin } from "../models/admin.model.js";
 
 const connectDabase = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URL, {
-      dbName: process.env.DB_NAME,
-    });
+    await mongoose.connect(
+      process.env.MONGO_URL,
+      {
+        dbName: process.env.DB_NAME,
+      },
+      {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+      }
+    );
     initializeAdmin();
     console.log("🌐------------------Database connected---------------🌐");
   } catch (error) {
