@@ -491,7 +491,7 @@ export const getListFromCategory = async (req, res) => {
             else: "$price",
           },
         },
-      }
+      },
     };
 
     const promotionProjectStage = {
@@ -524,14 +524,11 @@ export const getListFromCategory = async (req, res) => {
               discountPercentage: {
                 $ifNull: [
                   { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                  0
-                ]
+                  0,
+                ],
               },
               maxQty: {
-                $ifNull: [
-                  { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                  0
-                ]
+                $ifNull: [{ $arrayElemAt: ["$promotionProduct.maxQty", 0] }, 0],
               },
               startDate: "$promotionData.startDate",
               endDate: "$promotionData.endDate",
@@ -905,7 +902,7 @@ export const getListFromBrand = async (req, res) => {
             else: "$price",
           },
         },
-      }
+      },
     };
 
     const promotionProjectStage = {
@@ -938,14 +935,11 @@ export const getListFromBrand = async (req, res) => {
               discountPercentage: {
                 $ifNull: [
                   { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                  0
-                ]
+                  0,
+                ],
               },
               maxQty: {
-                $ifNull: [
-                  { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                  0
-                ]
+                $ifNull: [{ $arrayElemAt: ["$promotionProduct.maxQty", 0] }, 0],
               },
               startDate: "$promotionData.startDate",
               endDate: "$promotionData.endDate",
@@ -1248,7 +1242,9 @@ export const getProductHome = async (req, res) => {
                                 "$price",
                                 {
                                   $divide: [
-                                    { $arrayElemAt: ["$$discountPercentage", 0] },
+                                    {
+                                      $arrayElemAt: ["$$discountPercentage", 0],
+                                    },
                                     100,
                                   ],
                                 },
@@ -1309,15 +1305,20 @@ export const getProductHome = async (req, res) => {
                   name: "$promotionData.name",
                   discountPercentage: {
                     $ifNull: [
-                      { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                      0
-                    ]
+                      {
+                        $arrayElemAt: [
+                          "$promotionProduct.discountPercentage",
+                          0,
+                        ],
+                      },
+                      0,
+                    ],
                   },
                   maxQty: {
                     $ifNull: [
                       { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                      0
-                    ]
+                      0,
+                    ],
                   },
                   startDate: "$promotionData.startDate",
                   endDate: "$promotionData.endDate",
@@ -1476,8 +1477,8 @@ export const getProductSearch = async (req, res) => {
       {
         $match: {
           name: { $regex: search, $options: "i" },
-          enable: true
-        }
+          enable: true,
+        },
       },
       {
         $lookup: {
@@ -1562,7 +1563,7 @@ export const getProductSearch = async (req, res) => {
               else: "$price",
             },
           },
-        }
+        },
       },
       {
         $project: {
@@ -1593,15 +1594,17 @@ export const getProductSearch = async (req, res) => {
                 name: "$promotionData.name",
                 discountPercentage: {
                   $ifNull: [
-                    { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                    0
-                  ]
+                    {
+                      $arrayElemAt: ["$promotionProduct.discountPercentage", 0],
+                    },
+                    0,
+                  ],
                 },
                 maxQty: {
                   $ifNull: [
                     { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                    0
-                  ]
+                    0,
+                  ],
                 },
                 startDate: "$promotionData.startDate",
                 endDate: "$promotionData.endDate",
@@ -1826,15 +1829,17 @@ export const getProductPageSearch = async (req, res) => {
                 name: "$promotionData.name",
                 discountPercentage: {
                   $ifNull: [
-                    { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                    0
-                  ]
+                    {
+                      $arrayElemAt: ["$promotionProduct.discountPercentage", 0],
+                    },
+                    0,
+                  ],
                 },
                 maxQty: {
                   $ifNull: [
                     { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                    0
-                  ]
+                    0,
+                  ],
                 },
                 startDate: "$promotionData.startDate",
                 endDate: "$promotionData.endDate",
@@ -2093,15 +2098,17 @@ export const getAllProductByUser = async (req, res) => {
                 name: "$promotionData.name",
                 discountPercentage: {
                   $ifNull: [
-                    { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                    0
-                  ]
+                    {
+                      $arrayElemAt: ["$promotionProduct.discountPercentage", 0],
+                    },
+                    0,
+                  ],
                 },
                 maxQty: {
                   $ifNull: [
                     { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                    0
-                  ]
+                    0,
+                  ],
                 },
                 startDate: "$promotionData.startDate",
                 endDate: "$promotionData.endDate",
@@ -2264,7 +2271,7 @@ export const getProductDetailBySlug = async (req, res) => {
     const currentDate = new Date();
 
     const product = await Product.aggregate([
-      { $match: { slug } },
+      { $match: { slug, enable: true } },
       {
         $lookup: {
           from: "promotions",
@@ -2417,15 +2424,17 @@ export const getProductDetailBySlug = async (req, res) => {
                 name: "$promotionData.name",
                 discountPercentage: {
                   $ifNull: [
-                    { $arrayElemAt: ["$promotionProduct.discountPercentage", 0] },
-                    0
-                  ]
+                    {
+                      $arrayElemAt: ["$promotionProduct.discountPercentage", 0],
+                    },
+                    0,
+                  ],
                 },
                 maxQty: {
                   $ifNull: [
                     { $arrayElemAt: ["$promotionProduct.maxQty", 0] },
-                    0
-                  ]
+                    0,
+                  ],
                 },
                 startDate: "$promotionData.startDate",
                 endDate: "$promotionData.endDate",
@@ -2824,4 +2833,81 @@ export const getProductPromotion = async (req, res) => {
     });
   }
 };
-  
+
+export const getProductAlmostExpired = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 12;
+    const skip = (page - 1) * pageSize;
+
+    const [total, products] = await Promise.all([
+      Product.countDocuments({
+        isAlmostExpired: true,
+      }),
+      Product.find({
+        isAlmostExpired: true,
+      })
+        .populate({ path: "categories", select: "name" })
+        .populate({ path: "brand", select: "name" })
+        .sort({ expiry: 1 })
+        .skip(skip)
+        .limit(pageSize)
+        .lean(),
+    ]);
+
+    const currentDate = new Date();
+    const activeAndFuturePromotions = await Promotion.find({
+      endDate: { $gte: currentDate },
+    }).lean();
+
+    const promotionMap = new Map();
+    activeAndFuturePromotions.forEach((promo) => {
+      promo.products.forEach((p) => {
+        promotionMap.set(p.product.toString(), {
+          promotionId: promo._id,
+          promotionName: promo.name,
+          discountPercentage: p.discountPercentage,
+          maxQty: p.maxQty,
+          startDate: promo.startDate,
+          endDate: promo.endDate,
+        });
+      });
+    });
+
+    const productsWithPromotionInfo = products.map((product) => {
+      const promotionInfo = promotionMap.get(product._id.toString());
+      return {
+        ...product,
+        promotion: promotionInfo
+          ? {
+              id: promotionInfo.promotionId,
+              name: promotionInfo.promotionName,
+              discountPercentage: promotionInfo.discountPercentage,
+              maxQty: promotionInfo.maxQty,
+              startDate: promotionInfo.startDate,
+              endDate: promotionInfo.endDate,
+            }
+          : null,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      pagination: {
+        page: page,
+        totalPage: Math.ceil(total / pageSize),
+        pageSize: pageSize,
+        totalItems: total,
+      },
+      data: productsWithPromotionInfo,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      data: [],
+      error: error.message,
+    });
+  }
+};

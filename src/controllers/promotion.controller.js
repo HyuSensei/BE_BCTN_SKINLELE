@@ -26,39 +26,91 @@ export const getDetailPromotion = async (req, res) => {
   }
 };
 
+// export const getAllPromotions = async (req, res) => {
+//   try {
+//     const { startDate, endDate, page = 1, pageSize = 10 } = req.query;
+
+//     let query = {};
+
+//     if (startDate && endDate) {
+//       query.startDate = { $gte: new Date(startDate) };
+//       query.endDate = { $lte: new Date(endDate) };
+//     }
+
+//     const skip = (page - 1) * pageSize;
+
+//     const promotions = await Promotion.find(query)
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(Number(pageSize))
+//       .populate("products.product", "name price");
+
+//     const total = await Promotion.countDocuments(query);
+
+//     return res.status(200).json({
+//       success: true,
+//       data: promotions,
+//       pagination: {
+//         page: Number(page),
+//         totalPage: Math.ceil(total / pageSize),
+//         totalItems: total,
+//         pageSize: Number(pageSize),
+//       },
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json({
+//       success: false,
+//       data: [],
+//       error: error.message,
+//     });
+//   }
+// };
 export const getAllPromotions = async (req, res) => {
   try {
-    const { startDate, endDate, page = 1, pageSize = 10 } = req.query;
+    const { startDate, endDate, page, pageSize } = req.query;
 
     let query = {};
+    let paginationOptions = {};
 
     if (startDate && endDate) {
       query.startDate = { $gte: new Date(startDate) };
       query.endDate = { $lte: new Date(endDate) };
     }
 
-    const skip = (page - 1) * pageSize;
+    if (page && pageSize) {
+      const skip = (Number(page) - 1) * Number(pageSize);
+      paginationOptions = {
+        skip: skip,
+        limit: Number(pageSize),
+      };
+    }
 
     const promotions = await Promotion.find(query)
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(pageSize))
+      .skip(paginationOptions.skip || 0)
+      .limit(paginationOptions.limit || 0)
       .populate("products.product", "name price");
 
     const total = await Promotion.countDocuments(query);
 
-    return res.status(200).json({
+    const response = {
       success: true,
       data: promotions,
-      pagination: {
+    };
+
+    if (page && pageSize) {
+      response.pagination = {
         page: Number(page),
-        totalPage: Math.ceil(total / pageSize),
+        totalPage: Math.ceil(total / Number(pageSize)),
         totalItems: total,
         pageSize: Number(pageSize),
-      },
-    });
+      };
+    }
+
+    return res.status(200).json(response);
   } catch (error) {
-    console.log(error);
+    console.error("Error in getAllPromotions:", error);
     return res.status(500).json({
       success: false,
       data: [],

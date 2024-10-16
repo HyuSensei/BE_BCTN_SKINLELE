@@ -94,7 +94,11 @@ export const ProductSchema = new mongoose.Schema(
       required: true,
     },
     isAlmostExpired: {
-      type: Date,
+      type: Boolean,
+      default: false,
+    },
+    isExpired: {
+      type: Boolean,
       default: false,
     },
     capacity: {

@@ -1,4 +1,4 @@
-import Otp from "../models/otp.modal";
+import Otp from "../models/otp.model.js";
 
 export const cleanOtp = async () => {
   try {
