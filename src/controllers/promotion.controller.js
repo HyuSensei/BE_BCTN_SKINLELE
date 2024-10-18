@@ -4,7 +4,10 @@ import Product from "../models/product.model.js";
 export const getDetailPromotion = async (req, res) => {
   try {
     const id = req.params.id;
-    const promotion = await Promotion.findById(id);
+    const promotion = await Promotion.findById(id).populate(
+      "products.product",
+      "name mainImage"
+    );
     if (!promotion) {
       return res.status(404).json({
         success: false,
