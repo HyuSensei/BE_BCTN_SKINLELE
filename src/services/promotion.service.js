@@ -1,5 +1,6 @@
 import Promotion from "../models/promotion.model.js";
 import Product from "../models/product.model.js";
+import moment from "moment-timezone";
 
 export const updatePromotionAfterOrder = async (products) => {
   const currentDate = new Date();
@@ -37,5 +38,28 @@ export const updatePromotionAfterOrder = async (products) => {
         }
       }
     }
+  }
+};
+
+export const hideExpiredPromotions = async () => {
+  try {
+    moment.tz.setDefault("Asia/Ho_Chi_Minh");
+    const currentTime = moment().toDate();
+    const result = await Promotion.updateMany(
+      {
+        endDate: { $lt: currentTime },
+        isActive: true,
+      },
+      {
+        $set: { isActive: false },
+      }
+    );
+
+    console.log(`Ngừng hoạt ${result.modifiedCount} khuyến mãi.`);
+
+    return result.modifiedCount;
+  } catch (error) {
+    console.error("Error hiding expired promotions:", error);
+    throw error;
   }
 };
