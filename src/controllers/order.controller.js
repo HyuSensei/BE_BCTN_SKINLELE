@@ -3,6 +3,7 @@ import { ignoreLogger, ProductCode, VNPay, VnpLocale } from "vnpay";
 import Stripe from "stripe";
 import OrderSession from "../models/order-session.model.js";
 import dotenv from "dotenv";
+import { updatePromotionAfterOrder } from "../services/promotion.service.js";
 dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -46,6 +47,8 @@ export const createOrderCod = async (req, res) => {
       note: note ? note : "KHÔNG CÓ",
     });
     const savedOrder = await newOrder.save();
+
+    await updatePromotionAfterOrder(products);
     res.status(201).json({
       success: true,
       message: "Đặt hàng thành công",
@@ -90,6 +93,8 @@ export const createOrderVnpay = async (req, res) => {
       note: note ? note : "KHÔNG CÓ",
     });
     const savedOrder = await newOrder.save();
+
+    await updatePromotionAfterOrder(products);
 
     const ipAddr =
       req.headers["x-forwarded-for"] ||
@@ -204,13 +209,23 @@ const createOrderWebhook = async ({
 
   switch (action) {
     case "create":
-      return await Promise.all([
+      // return await Promise.all([
+      //   Order.create({
+      //     ...orderSession,
+      //     stripeSessionId,
+      //   }),
+      //   OrderSession.deleteOne({ _id: orderId }),
+      // ]);
+      const [createdOrder] = await Promise.all([
         Order.create({
           ...orderSession,
           stripeSessionId,
         }),
         OrderSession.deleteOne({ _id: orderId }),
       ]);
+      await updatePromotionAfterOrder(orderSession.products);
+
+      return createdOrder;
 
     case "delete":
       return await OrderSession.deleteOne({ _id: orderId });
@@ -543,7 +558,7 @@ export const getOrderByAdmin = async (req, res) => {
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
-        { "user.email": { $regex: search, $options: "i" } }
+        { "user.email": { $regex: search, $options: "i" } },
       ];
     }
 

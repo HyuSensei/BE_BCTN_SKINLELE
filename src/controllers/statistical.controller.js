@@ -1,58 +1,102 @@
 import Order from "../models/order.model.js";
 import User from "../models/user.model.js";
 import Product from "../models/product.model.js";
-import Review from "../models/review.model.js";
 import moment from "moment-timezone";
 
+moment.tz.setDefault("Asia/Ho_Chi_Minh");
 export const getStatistics = async (req, res) => {
   try {
-    const startOfYear = moment().tz("Asia/Ho_Chi_Minh").startOf("year");
-    const endOfYear = moment().tz("Asia/Ho_Chi_Minh").endOf("year");
+    const year = parseInt(req.query.year) || moment().year();
+    const month = req.query.month ? parseInt(req.query.month) : null;
 
-    // Fetch statistics for each month of the current year
-    const monthlyStats = await Promise.all(
-      Array.from({ length: 12 }, async (_, index) => {
-        const startOfMonth = moment(startOfYear).add(index, "months");
-        const endOfMonth = moment(startOfMonth).endOf("month");
+    let startDate, endDate, timeUnit;
+    const currentYear = moment().year();
+    const yearStartDate = moment().year(currentYear).startOf("year");
+    const yearEndDate = moment().year(currentYear).endOf("year");
 
-        const orders = await Order.find({
-          createdAt: { $gte: startOfMonth.toDate(), $lte: endOfMonth.toDate() },
-        });
+    if (month) {
+      // Monthly revenue statistics
+      startDate = moment()
+        .year(year)
+        .month(month - 1)
+        .startOf("month");
+      endDate = moment(startDate).endOf("month");
+      timeUnit = "day";
+    } else {
+      // Yearly revenue statistics
+      startDate = moment().year(year).startOf("year");
+      endDate = moment(startDate).endOf("year");
+      timeUnit = "month";
+    }
 
-        const revenue = orders.reduce(
-          (sum, order) => sum + order.totalAmount,
-          0
-        );
-        const orderCount = orders.length;
+    // Fetch revenue statistics
+    const revenueStats = await Promise.all(
+      Array.from(
+        { length: endDate.diff(startDate, timeUnit) + 1 },
+        async (_, index) => {
+          const start = moment(startDate).add(index, timeUnit);
+          const end = moment(start).endOf(timeUnit);
 
-        return {
-          month: startOfMonth.format("MMM"),
-          revenue,
-          orderCount,
-        };
-      })
+          const orders = await Order.find({
+            createdAt: { $gte: start.toDate(), $lte: end.toDate() },
+          });
+
+          const revenue = orders.reduce(
+            (sum, order) => sum + order.totalAmount,
+            0
+          );
+          const orderCount = orders.length;
+
+          const stat = {
+            month: start.format("MMM"),
+            revenue,
+            orderCount,
+          };
+
+          if (timeUnit === "day") {
+            stat.day = start.format("DD");
+          }
+
+          return stat;
+        }
+      )
     );
 
-    // Calculate totals for the year
+    // Calculate totals for the current year
     const totalOrders = await Order.countDocuments({
-      createdAt: { $gte: startOfYear.toDate(), $lte: endOfYear.toDate() },
+      createdAt: { $gte: yearStartDate.toDate(), $lte: yearEndDate.toDate() },
     });
-    const totalRevenue = monthlyStats.reduce(
-      (sum, stat) => sum + stat.revenue,
-      0
-    );
+    const totalRevenue = await Order.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: yearStartDate.toDate(),
+            $lte: yearEndDate.toDate(),
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$totalAmount" },
+        },
+      },
+    ]).then((result) => result[0]?.total || 0);
     const totalCustomers = await User.countDocuments({
-      createdAt: { $lte: endOfYear.toDate() },
+      createdAt: { $lte: yearEndDate.toDate() },
     });
     const totalProducts = await Product.countDocuments({
-      createdAt: { $lte: endOfYear.toDate() },
+      createdAt: { $lte: yearEndDate.toDate() },
     });
 
-    // Calculate top selling products
+    // Calculate top selling products for the current year
     const topSellingProducts = await Order.aggregate([
       {
         $match: {
-          createdAt: { $gte: startOfYear.toDate(), $lte: endOfYear.toDate() },
+          createdAt: {
+            $gte: yearStartDate.toDate(),
+            $lte: yearEndDate.toDate(),
+          },
         },
       },
       { $unwind: "$products" },
@@ -81,46 +125,10 @@ export const getStatistics = async (req, res) => {
       },
     ]);
 
-    // Calculate top reviewed products
-    const topReviewedProducts = await Review.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startOfYear.toDate(), $lte: endOfYear.toDate() },
-        },
-      },
-      {
-        $group: {
-          _id: "$product",
-          reviewCount: { $sum: 1 },
-          averageRating: { $avg: "$rate" },
-        },
-      },
-      { $sort: { reviewCount: -1 } },
-      { $limit: 3 },
-      {
-        $lookup: {
-          from: "products",
-          localField: "_id",
-          foreignField: "_id",
-          as: "productDetails",
-        },
-      },
-      { $unwind: "$productDetails" },
-      {
-        $project: {
-          id: "$productDetails._id",
-          name: "$productDetails.name",
-          image: "$productDetails.mainImage.url",
-          reviewCount: 1,
-          averageRating: 1,
-        },
-      },
-    ]);
-
     return res.status(200).json({
       success: true,
       data: {
-        yearlyStats: monthlyStats,
+        yearlyStats: revenueStats,
         totals: {
           orders: totalOrders,
           revenue: totalRevenue,
@@ -128,7 +136,6 @@ export const getStatistics = async (req, res) => {
           products: totalProducts,
         },
         topSellingProducts,
-        topReviewedProducts,
       },
     });
   } catch (error) {

@@ -29,46 +29,6 @@ export const getDetailPromotion = async (req, res) => {
   }
 };
 
-// export const getAllPromotions = async (req, res) => {
-//   try {
-//     const { startDate, endDate, page = 1, pageSize = 10 } = req.query;
-
-//     let query = {};
-
-//     if (startDate && endDate) {
-//       query.startDate = { $gte: new Date(startDate) };
-//       query.endDate = { $lte: new Date(endDate) };
-//     }
-
-//     const skip = (page - 1) * pageSize;
-
-//     const promotions = await Promotion.find(query)
-//       .sort({ createdAt: -1 })
-//       .skip(skip)
-//       .limit(Number(pageSize))
-//       .populate("products.product", "name price");
-
-//     const total = await Promotion.countDocuments(query);
-
-//     return res.status(200).json({
-//       success: true,
-//       data: promotions,
-//       pagination: {
-//         page: Number(page),
-//         totalPage: Math.ceil(total / pageSize),
-//         totalItems: total,
-//         pageSize: Number(pageSize),
-//       },
-//     });
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(500).json({
-//       success: false,
-//       data: [],
-//       error: error.message,
-//     });
-//   }
-// };
 export const getAllPromotions = async (req, res) => {
   try {
     const { startDate, endDate, page, pageSize } = req.query;
@@ -205,12 +165,17 @@ export const updatePromotion = async (req, res) => {
     promotion.isActive = isActive !== undefined ? isActive : promotion.isActive;
 
     if (products) {
-      promotion.products = products.map((p) => ({
-        product: p.product,
-        discountPercentage: p.discountPercentage,
-        maxQty: p.maxQty,
-        usedQty: p.usedQty || 0,
-      }));
+      promotion.products = products.map((p) => {
+        const existingProduct = promotion.products.find(
+          (prod) => prod.product.toString() === p.product.toString()
+        );
+        return {
+          product: p.product,
+          discountPercentage: p.discountPercentage,
+          maxQty: p.maxQty,
+          usedQty: p?.usedQty || existingProduct?.usedQty || 0,
+        };
+      });
     }
 
     const updatedPromotion = await promotion.save();
