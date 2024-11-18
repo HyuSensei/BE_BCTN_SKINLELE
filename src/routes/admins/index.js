@@ -8,17 +8,18 @@ import reviewRoutes from "./review.admin-route.js";
 import userRoutes from "./user.admin-route.js";
 import statisticalRoutes from "./statistical.admin.js";
 import promotionRoutes from "./promotion.admin-route.js";
+import { authMiddlewareAdmin } from "../../middleware/auth.middleware.js";
 
 const router = express.Router();
 
 router.use("/auth", authRoutes);
-router.use("/brands", brandRoutes);
-router.use("/categories", categoryRoutes);
-router.use("/orders", orderRoutes);
-router.use("/products", productRoutes);
-router.use("/reviews", reviewRoutes);
-router.use("/users", userRoutes);
-router.use("/statistical", statisticalRoutes);
-router.use("/promotions", promotionRoutes);
+router.use("/brands", authMiddlewareAdmin, brandRoutes);
+router.use("/categories", authMiddlewareAdmin, categoryRoutes);
+router.use("/orders", authMiddlewareAdmin, orderRoutes);
+router.use("/products", authMiddlewareAdmin, productRoutes);
+router.use("/reviews", authMiddlewareAdmin, reviewRoutes);
+router.use("/users", authMiddlewareAdmin, userRoutes);
+router.use("/statistical", authMiddlewareAdmin, statisticalRoutes);
+router.use("/promotions", authMiddlewareAdmin, promotionRoutes);
 
 export default router;
