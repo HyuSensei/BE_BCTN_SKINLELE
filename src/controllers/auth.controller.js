@@ -345,7 +345,7 @@ export const getAccountAdmin = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        id: adminDetails._id,
+        _id: adminDetails._id,
         name: adminDetails.name,
         username: adminDetails.username,
         avatar: adminDetails.avatar,

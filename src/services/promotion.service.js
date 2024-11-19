@@ -55,7 +55,7 @@ export const hideExpiredPromotions = async () => {
       }
     );
 
-    console.log(`Ngừng hoạt ${result.modifiedCount} khuyến mãi.`);
+    console.log(`Ngừng hoạt động ${result.modifiedCount} khuyến mãi.`);
 
     return result.modifiedCount;
   } catch (error) {

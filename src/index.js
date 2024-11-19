@@ -14,6 +14,7 @@ import { googleCallback } from "./controllers/auth.controller.js";
 import { handleWebhookOrder } from "./controllers/order.controller.js";
 import "./jobs/expired.js";
 import "./jobs/opt.js";
+import { app, server } from "./websocket/index.js";
 
 dotenv.config();
 
@@ -21,7 +22,7 @@ const PORT = process.env.PORT || 8000;
 const clientID = process.env.GOOGLE_CLIENT_ID;
 const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
-const app = express();
+// const app = express();
 
 app.use(
   cors({
@@ -113,7 +114,7 @@ passport.deserializeUser((id, done) => {
 app.use("/api/v1", userRoutes);
 app.use("/api/v1/admin", adminRoutes);
 
-app.listen(PORT, async () => {
+server.listen(PORT, async () => {
   await connectDabase();
   console.log(`🚀-------------SERVER RUN PORT ${PORT}-------------🚀`);
 });

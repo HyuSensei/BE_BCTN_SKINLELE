@@ -14,9 +14,7 @@ export const saveUser = async (profile, done) => {
         });
       }
       existingUser.googleId = profile.id;
-      existingUser.avatar.url = profile.photos[0].value;
       existingUser.isActive = true;
-      existingUser.name = profile.displayName;
       await existingUser.save();
       return done(null, existingUser);
     }
