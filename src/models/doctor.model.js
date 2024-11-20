@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import slugify from "slugify";
+import bcrypt from "bcryptjs";
 
 export const DocterSchema = new mongoose.Schema(
   {
@@ -27,7 +28,8 @@ export const DocterSchema = new mongoose.Schema(
     },
     slug: {
       type: String,
-      required: true,
+      lowercase: true,
+      unique: true,
     },
     about: {
       type: String,
@@ -40,6 +42,10 @@ export const DocterSchema = new mongoose.Schema(
     fees: {
       type: Number,
       required: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
     },
   },
   { timestamps: true }

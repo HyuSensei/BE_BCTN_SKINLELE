@@ -5,6 +5,15 @@ import Otp from "../models/otp.model.js";
 import { generateOTP } from "../ultis/generateOTP.js";
 import { sendEmail } from "../configs/mail.js";
 import Admin from "../models/admin.model.js";
+import Doctor from "../models/doctor.model.js";
+
+const generateTokenDoctor = (doctor) => {
+  return jwt.sign(
+    { id: doctor._id, email: doctor.email },
+    process.env.JWT_SECRET_KEY_DOCTOR,
+    { expiresIn: process.env.JWT_EXPIRES_IN }
+  );
+};
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -60,7 +69,7 @@ export const login = async (req, res) => {
     }
 
     const token = generateToken(user);
-    res.status(200).json(handleLoginResponse(user, token));
+    return res.status(200).json(handleLoginResponse(user, token));
   } catch (error) {
     console.log(error);
     res.status(500).json({
@@ -305,7 +314,7 @@ export const loginAdmin = async (req, res) => {
       success: true,
       accessToken: token,
       data: {
-        id: admin._id,
+        _id: admin._id,
         name: admin.name,
         username: admin.username,
         avatar: admin.avatar,
@@ -324,7 +333,7 @@ export const loginAdmin = async (req, res) => {
 
 export const getAccountAdmin = async (req, res) => {
   try {
-    const adminDetails = await Admin.findById(req.admin.id).select(
+    const adminDetails = await Admin.findById(req.admin._id).select(
       "-password -__v"
     );
 
@@ -367,5 +376,83 @@ export const googleCallback = async (req, res) => {
     return res.redirect(`${process.env.FRONT_END_URL}?token=${accessToken}`);
   } catch (error) {
     return res.redirect(`${process.env.FRONT_END_URL}/auth?error=server_error`);
+  }
+};
+
+export const loginDoctor = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const doctor = await Doctor.findOne({ email });
+
+    if (!doctor || !(await bcrypt.compare(password, doctor.password))) {
+      return res.status(400).json({
+        success: false,
+        message: "Thông tin đăng nhập không chính xác",
+      });
+    }
+
+    if (!doctor.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "Tài khoản không hoạt động vui lòng thử lại",
+      });
+    }
+
+    const token = generateTokenDoctor(doctor);
+    return res.status(200).json({
+      success: true,
+      message: "Đăng nhập thành công",
+      data: {
+        accessToken: token,
+        _id: doctor._id,
+        name: doctor.name,
+        email: doctor.email,
+        avatar: doctor.avatar,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      message: "Có lỗi xảy ra khi đăng nhập",
+    });
+  }
+};
+
+export const getAccountDoctor = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.user._id).select("-password -__v");
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin tài khoản bác sĩ",
+      });
+    }
+
+    if (!doctor.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Tài khoản bác sĩ đã bị vô hiệu hóa",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        _id: doctor._id,
+        name: doctor.name,
+        email: doctor.email,
+        avatar: doctor.avatar,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      data: {},
+      message: error.message,
+    });
   }
 };

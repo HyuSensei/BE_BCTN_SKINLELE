@@ -19,7 +19,7 @@ export const AdminSchema = new mongoose.Schema(
     role: {
       type: String,
       default: "ADMIN",
-      enum: ["ADMIN", "SUPPORT"],
+      enum: ["ADMIN", "SUPPORT", "DOCTOR"],
     },
     avatar: {
       url: {
@@ -53,17 +53,42 @@ const Admin = mongoose.model("Admin", AdminSchema);
 export const initializeAdmin = async () => {
   const adminCount = await Admin.countDocuments();
   if (adminCount === 0) {
-    const defaultAdmin = new Admin({
-      name: "Phan Tiến Huy",
-      username: "admin",
-      password: "admin123",
-      role: "ADMIN",
-      avatar: {
-        url: `https://avatar.iran.liara.run/username?username=Phan Tiến Huy}`,
-        publicId: "",
+    const defaultAccounts = [
+      {
+        name: "Admin SkinLeLe",
+        username: "admin",
+        password: "admin123",
+        role: "ADMIN",
+        avatar: {
+          url: `https://avatar.iran.liara.run/username?username=admin`,
+          publicId: "",
+        },
       },
-    });
-    await defaultAdmin.save();
+      {
+        name: "Support SkinLeLe",
+        username: "support",
+        password: "support123",
+        role: "SUPPORT",
+        avatar: {
+          url: `https://avatar.iran.liara.run/username?username=support`,
+          publicId: "",
+        },
+      },
+      {
+        name: "Admin Doctor",
+        username: "admin-doctor",
+        password: "doctor123",
+        role: "DOCTOR",
+        avatar: {
+          url: `https://avatar.iran.liara.run/username?username=doctor`,
+          publicId: "",
+        },
+      },
+    ];
+    for (const account of defaultAccounts) {
+      const newUser = new Admin(account);
+      await newUser.save();
+    }
   }
 };
 

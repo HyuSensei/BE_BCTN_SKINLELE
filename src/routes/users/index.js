@@ -5,6 +5,9 @@ import categoryRoutes from "./category.user-route.js";
 import orderRoutes from "./order.user-route.js";
 import productRoutes from "./product.user-route.js";
 import reviewRoutes from "./review.user-route.js";
+import doctorRoutes from "./doctor.user-route.js";
+import reviewDoctorRoutes from "./review-doctor.user-route.js";
+import bookingRoutes from "./booking.user-route.js";
 
 const router = express.Router();
 
@@ -14,5 +17,8 @@ router.use("/categories", categoryRoutes);
 router.use("/orders", orderRoutes);
 router.use("/products", productRoutes);
 router.use("/reviews", reviewRoutes);
+router.use("/doctors", doctorRoutes);
+router.use("/review-doctors", reviewDoctorRoutes);
+router.use("/bookings", bookingRoutes);
 
 export default router;
