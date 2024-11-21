@@ -8,6 +8,7 @@ import {
 import {
   getAccountUser,
   login,
+  loginDoctor,
   register,
   resetPassword,
   sendOtp,
@@ -37,5 +38,12 @@ router.put(
   updateAccount
 );
 router.get("/account", authMiddlewareUser, getAccountUser);
+
+router.post(
+  "/doctor-login",
+  loginUserValidate,
+  validateMiddleWare,
+  loginDoctor
+);
 
 export default router;

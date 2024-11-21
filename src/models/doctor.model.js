@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 
 export const DocterSchema = new mongoose.Schema(
   {
+    clinic: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Clinic",
+    },
     name: {
       type: String,
       required: true,
@@ -46,6 +50,10 @@ export const DocterSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isIndependent: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

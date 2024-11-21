@@ -1,3 +1,4 @@
+import Booking from "../models/booking.model.js";
 import Schedule from "../models/schedule.model.js";
 import moment from "moment";
 
@@ -90,9 +91,17 @@ export const removeSchedule = async (req, res) => {
 
 export const getScheduleByDoctor = async (req, res) => {
   try {
-    const { doctorId, date } = req.params;
+    const { doctorId } = req.params;
+    const today = moment().format("YYYY-MM-DD");
+    const targetDate = req.query.date || today;
 
-    const schedule = await Schedule.findOne({ doctor: doctorId });
+    const startOfWeek = moment(targetDate).startOf("week");
+    const endOfWeek = moment(targetDate).endOf("week");
+
+    const schedule = await Schedule.findOne({ doctor: doctorId }).populate({
+      path: "doctor",
+      select: "-password -__v -createdAt -updatedAt",
+    });
 
     if (!schedule) {
       return res.status(404).json({
@@ -101,55 +110,110 @@ export const getScheduleByDoctor = async (req, res) => {
       });
     }
 
-    schedule.schedule.forEach((slot) => {
-      if (slot.isActive) {
-        slot.availableSlots = generateTimeSlots(slot, date);
+    const bookings = await Booking.find({
+      doctor: doctorId,
+      date: {
+        $gte: startOfWeek.toDate(),
+        $lte: endOfWeek.toDate(),
+      },
+      status: { $in: ["pending", "confirmed"] },
+    }).select("date startTime endTime");
+
+    const bookingMap = bookings.reduce((acc, booking) => {
+      const dayOfWeek = moment(booking.date).locale("vi").format("dddd");
+      if (!acc[dayOfWeek]) {
+        acc[dayOfWeek] = [];
       }
-    });
+      acc[dayOfWeek].push({
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+      });
+      return acc;
+    }, {});
+
+    const processedSchedule = schedule.schedule
+      .filter((slot) => slot.isActive)
+      .map((slot) => {
+        const slotDate = moment(startOfWeek)
+          .day(moment().locale("vi").day(slot.dayOfWeek).day())
+          .format("YYYY-MM-DD");
+
+        const timeSlots = generateTimeSlots(
+          slot,
+          bookingMap[slot.dayOfWeek] || []
+        );
+
+        return {
+          dayOfWeek: slot.dayOfWeek,
+          date: slotDate,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          duration: slot.duration,
+          breakTime: slot.breakTime,
+          isToday: slotDate === today,
+          timeSlots,
+        };
+      });
 
     return res.json({
       success: true,
       data: {
-        schedule,
+        doctor: schedule.doctor,
+        weekRange: {
+          start: startOfWeek.format("YYYY-MM-DD"),
+          end: endOfWeek.format("YYYY-MM-DD"),
+          today,
+        },
+        schedule: processedSchedule,
       },
     });
   } catch (error) {
     console.error(error);
     return res.status(500).json({
       success: false,
-      data: {},
+      message: "Lỗi khi lấy lịch làm việc",
       error: error.message,
     });
   }
 };
 
-const generateTimeSlots = (slot, date) => {
+const generateTimeSlots = (slot, existingBookings) => {
   const timeSlots = [];
-  h;
-  const dayOfWeek = moment(date).locale("vi").format("dddd");
+  const [startHour, startMinute] = slot.startTime.split(":");
+  const [endHour, endMinute] = slot.endTime.split(":");
 
-  if (slot.dayOfWeek === dayOfWeek) {
-    let startTime = moment(`${date} ${slot.startTime}`, "YYYY-MM-DD HH:mm");
-    const endTime = moment(`${date} ${slot.endTime}`, "YYYY-MM-DD HH:mm");
+  let currentMinutes = parseInt(startHour) * 60 + parseInt(startMinute);
+  const endMinutes = parseInt(endHour) * 60 + parseInt(endMinute);
 
-    while (startTime < endTime) {
-      const slotStartTime = startTime.format("HH:mm");
-      const slotEndTime = startTime.clone().add(slot.duration, "minutes");
+  while (currentMinutes + slot.duration <= endMinutes) {
+    const startTime = formatTime(currentMinutes);
+    const endTime = formatTime(currentMinutes + slot.duration);
 
-      if (
-        !slot.breakTime ||
-        slotStartTime >= slot.breakTime.end ||
-        slotEndTime.format("HH:mm") <= slot.breakTime.start
-      ) {
-        timeSlots.push({
-          startTime: slotStartTime,
-          endTime: slotEndTime.format("HH:mm"),
-        });
-      }
+    const isBreakTime =
+      slot.breakTime &&
+      startTime >= slot.breakTime.start &&
+      endTime <= slot.breakTime.end;
 
-      startTime = startTime.add(slot.duration, "minutes");
+    const isBooked = existingBookings.some(
+      (booking) => booking.startTime === startTime
+    );
+
+    if (!isBreakTime) {
+      timeSlots.push({
+        startTime,
+        endTime,
+        isBooked,
+      });
     }
+
+    currentMinutes += slot.duration;
   }
 
   return timeSlots;
+};
+
+const formatTime = (minutes) => {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 };
