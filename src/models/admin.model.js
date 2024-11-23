@@ -19,7 +19,7 @@ export const AdminSchema = new mongoose.Schema(
     role: {
       type: String,
       default: "ADMIN",
-      enum: ["ADMIN", "SUPPORT", "DOCTOR"],
+      enum: ["ADMIN", "SUPPORT", "CLINIC"],
     },
     avatar: {
       url: {

@@ -9,21 +9,73 @@ import userRoutes from "./user.admin-route.js";
 import statisticalRoutes from "./statistical.admin.js";
 import promotionRoutes from "./promotion.admin-route.js";
 import doctorRoutes from "./doctor.admin-route.js";
+import adminAccountRoutes from "./admin-account.admin-route.js";
+import clinicRoutes from "./clinic.admin-route.js";
 import { authMiddlewareAdmin } from "../../middleware/auth.middleware.js";
+import {
+  accessRole,
+  ADMIN_ROLE,
+  CLINIC_ROLE,
+  SUPPORT_ROLE,
+} from "../../ultis/getRole.js";
 
 const router = express.Router();
-const adminStores = ["ADMIN", "SUPPORT"];
-const adminDoctors = ["DOCTOR"];
 
 router.use("/auth", authRoutes);
-router.use("/brands", authMiddlewareAdmin(adminStores), brandRoutes);
-router.use("/categories", authMiddlewareAdmin(adminStores), categoryRoutes);
-router.use("/orders", authMiddlewareAdmin(adminStores), orderRoutes);
-router.use("/products", authMiddlewareAdmin(adminStores), productRoutes);
-router.use("/reviews", authMiddlewareAdmin(adminStores), reviewRoutes);
-router.use("/users", authMiddlewareAdmin(adminStores), userRoutes);
-router.use("/statistical", authMiddlewareAdmin(adminStores), statisticalRoutes);
-router.use("/promotions", authMiddlewareAdmin(adminStores), promotionRoutes);
-router.use("/doctors", authMiddlewareAdmin(adminDoctors), doctorRoutes);
+router.use(
+  "/brands",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  brandRoutes
+);
+router.use(
+  "/categories",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  categoryRoutes
+);
+router.use(
+  "/orders",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  orderRoutes
+);
+router.use(
+  "/products",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  productRoutes
+);
+router.use(
+  "/reviews",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  reviewRoutes
+);
+router.use(
+  "/users",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  userRoutes
+);
+router.use(
+  "/statistical",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  statisticalRoutes
+);
+router.use(
+  "/promotions",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  promotionRoutes
+);
+router.use(
+  "/admin-accounts",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  adminAccountRoutes
+);
+router.use(
+  "/clinics",
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  clinicRoutes
+);
+router.use(
+  "/doctors",
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  doctorRoutes
+);
 
 export default router;

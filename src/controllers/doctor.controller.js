@@ -2,7 +2,19 @@ import Doctor from "../models/doctor.model.js";
 
 export const createDoctor = async (req, res) => {
   try {
-    const { name, email, password, about, phone, fees, avatar } = req.body;
+    const clinic = req.admin._id;
+    const {
+      name,
+      email,
+      password,
+      about,
+      phone,
+      fees,
+      avatar,
+      specialty,
+      experience,
+      isIndependent = false,
+    } = req.body;
 
     const existingDoctor = await Doctor.findOne({ email });
     if (existingDoctor) {
@@ -20,6 +32,9 @@ export const createDoctor = async (req, res) => {
       phone,
       fees,
       avatar,
+      specialty,
+      experience,
+      isIndependent,
     });
 
     const savedDoctor = await newDoctor.save();
@@ -69,6 +84,8 @@ export const updateDoctor = async (req, res) => {
     if (phone) doctor.phone = phone;
     if (fees) doctor.fees = fees;
     if (avatar) doctor.avatar = avatar;
+    if (specialty) doctor.specialty = specialty;
+    if (experience) doctor.experience = experience;
 
     const updatedDoctor = await doctor.save();
 

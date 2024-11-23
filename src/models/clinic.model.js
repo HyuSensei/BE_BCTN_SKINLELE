@@ -7,6 +7,7 @@ const ClinicSchema = new mongoose.Schema(
       ref: "Admin",
       required: true,
     },
+    specialties: [String],
     name: {
       type: String,
       required: true,

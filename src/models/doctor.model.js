@@ -22,6 +22,14 @@ export const DocterSchema = new mongoose.Schema(
         required: true,
       },
     },
+    specialty: {
+      type: String,
+      required: true,
+    },
+    experience: {
+      type: Number,
+      required: true,
+    },
     email: {
       type: String,
       required: true,

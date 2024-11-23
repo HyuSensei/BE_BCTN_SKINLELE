@@ -6,9 +6,9 @@ import orderRoutes from "./order.user-route.js";
 import productRoutes from "./product.user-route.js";
 import reviewRoutes from "./review.user-route.js";
 import doctorRoutes from "./doctor.user-route.js";
-import reviewDoctorRoutes from "./review-doctor.user-route.js";
 import bookingRoutes from "./booking.user-route.js";
 import scheduleRoutes from "./schedule.user-route.js";
+import clinicRoutes from "./clinic.user-route.js";
 
 const router = express.Router();
 
@@ -19,8 +19,8 @@ router.use("/orders", orderRoutes);
 router.use("/products", productRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/doctors", doctorRoutes);
-router.use("/review-doctors", reviewDoctorRoutes);
 router.use("/bookings", bookingRoutes);
 router.use("/schedules", scheduleRoutes);
+router.use("/clinics", clinicRoutes);
 
 export default router;
