@@ -1,4 +1,15 @@
 import mongoose from "mongoose";
+import slugify from "slugify";
+
+const weekdays = [
+  "Thứ 2",
+  "Thứ 3",
+  "Thứ 4",
+  "Thứ 5",
+  "Thứ 6",
+  "Thứ 7",
+  "Chủ nhật",
+];
 
 const ClinicSchema = new mongoose.Schema(
   {
@@ -38,6 +49,10 @@ const ClinicSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    slug: {
+      type: String,
+      required: true,
+    },
     images: [
       {
         url: {
@@ -54,9 +69,57 @@ const ClinicSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    workingHours: {
+      regularHours: {
+        startDay: {
+          type: String,
+          enum: weekdays,
+          required: true,
+        },
+        endDay: {
+          type: String,
+          enum: weekdays,
+          required: true,
+        },
+        startTime: String,
+        endTime: String,
+      },
+      specialHours: [
+        {
+          day: {
+            type: String,
+            enum: weekdays,
+          },
+          startTime: String,
+          endTime: String,
+        },
+      ],
+    },
   },
   { timestamps: true }
 );
+
+ClinicSchema.pre("save", function (next) {
+  this.slug = slugify(this.name, { lower: true, locale: "vi" });
+  next();
+});
+
+ClinicSchema.virtual("doctorCount", {
+  ref: "Doctor",
+  localField: "_id",
+  foreignField: "clinic",
+  count: true,
+});
+
+ClinicSchema.virtual("averageRating", {
+  ref: "ReviewClinic",
+  localField: "_id",
+  foreignField: "clinic",
+  options: { match: { isActive: true } },
+});
+
+ClinicSchema.index({ slug: 1 }, { unique: true });
+ClinicSchema.index({ isActive: 1 });
 
 const Clinic = mongoose.model("Clinic", ClinicSchema);
 
