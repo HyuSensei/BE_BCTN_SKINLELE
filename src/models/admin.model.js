@@ -74,16 +74,6 @@ export const initializeAdmin = async () => {
           publicId: "",
         },
       },
-      {
-        name: "Admin Doctor",
-        username: "admin-doctor",
-        password: "doctor123",
-        role: "DOCTOR",
-        avatar: {
-          url: `https://avatar.iran.liara.run/username?username=doctor`,
-          publicId: "",
-        },
-      },
     ];
     for (const account of defaultAccounts) {
       const newUser = new Admin(account);

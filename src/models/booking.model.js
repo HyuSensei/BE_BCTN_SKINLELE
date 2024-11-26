@@ -39,6 +39,11 @@ const BookingSchema = new mongoose.Schema(
       ref: "Doctor",
       required: true,
     },
+    clinic: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Clinic",
+      required: true,
+    },
     date: {
       type: Date,
       required: true,

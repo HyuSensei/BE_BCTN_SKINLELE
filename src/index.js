@@ -28,6 +28,12 @@ app.use(
   cors({
     origin: process.env.FRONT_END_URL,
     credentials: true,
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-User-Header",
+      "X-Admin-Header",
+    ],
   })
 );
 

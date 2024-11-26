@@ -107,7 +107,7 @@ export const getStatistics = async (req, res) => {
         },
       },
       { $sort: { totalSold: -1 } },
-      { $limit: 8 },
+      { $limit: 5 },
       {
         $lookup: {
           from: "products",
@@ -125,6 +125,71 @@ export const getStatistics = async (req, res) => {
       },
     ]);
 
+    // Get total orders grouped by status
+    const orderStatuses = await Order.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: yearStartDate.toDate(),
+            $lte: yearEndDate.toDate(),
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          orderCount: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          status: "$_id",
+          orderCount: 1,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          statuses: {
+            $push: {
+              k: "$status",
+              v: "$orderCount",
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          statuses: 1,
+        },
+      },
+      {
+        $addFields: {
+          statuses: {
+            $concatArrays: [
+              [
+                { k: "pending", v: 0 },
+                { k: "processing", v: 0 },
+                { k: "shipping", v: 0 },
+                { k: "delivered", v: 0 },
+                { k: "cancelled", v: 0 },
+              ],
+              "$statuses",
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          statuses: {
+            $arrayToObject: "$statuses",
+          },
+        },
+      },
+    ]);
+
     return res.status(200).json({
       success: true,
       data: {
@@ -136,6 +201,7 @@ export const getStatistics = async (req, res) => {
           products: totalProducts,
         },
         topSellingProducts,
+        orderStatuses: orderStatuses[0]?.statuses,
       },
     });
   } catch (error) {

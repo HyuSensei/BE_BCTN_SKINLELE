@@ -205,7 +205,7 @@ export const getAllAccountAdmin = async (req, res) => {
       pagination: {
         page: parseInt(page),
         pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(total / pageSize),
+        totalPage: Math.ceil(total / pageSize),
         totalItems: total,
       },
       statistics: {

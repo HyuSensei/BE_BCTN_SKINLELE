@@ -2,12 +2,13 @@ import Booking from "../models/booking.model.js";
 
 export const createBooking = async (req, res) => {
   try {
-    const { doctor, date, startTime, endTime, customer, price, note } =
+    const { clinic, doctor, date, startTime, endTime, customer, price, note } =
       req.body;
     const user = req.user._id;
 
     const existingBooking = await Booking.findOne({
       doctor,
+      clinic,
       date,
       startTime,
       status: { $in: ["pending", "confirmed"] },
@@ -23,6 +24,7 @@ export const createBooking = async (req, res) => {
     const booking = await Booking.create({
       user,
       doctor,
+      clinic,
       date: new Date(date),
       startTime,
       endTime,
@@ -135,7 +137,8 @@ export const getBookingDetail = async (req, res) => {
     const { id } = req.params;
     const booking = await Booking.findById(id)
       .populate("user", "name email")
-      .populate("doctor", "name email phone");
+      .populate("doctor", "name email phone")
+      .populate("clinic", "name logo address slug");
 
     if (!booking) {
       return res.status(404).json({
