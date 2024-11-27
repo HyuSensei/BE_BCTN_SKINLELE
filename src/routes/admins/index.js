@@ -74,7 +74,7 @@ router.use(
 );
 router.use(
   "/doctors",
-  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE, ADMIN_ROLE])),
   doctorRoutes
 );
 

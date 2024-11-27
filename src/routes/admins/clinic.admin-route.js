@@ -9,6 +9,7 @@ import {
   getAllReviewClinic,
   removeReviewClinic,
 } from "../../controllers/review-clinic.controller.js";
+import { getAllBookingByAdmin } from "../../controllers/booking.controller.js";
 
 const router = express.Router();
 
@@ -19,5 +20,7 @@ router.get("/", getAllClinic);
 
 router.get("/reviews", getAllReviewClinic);
 router.delete("/reviews/:id", removeReviewClinic);
+
+router.get("/bookings", getAllBookingByAdmin);
 
 export default router;

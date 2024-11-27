@@ -1,3 +1,4 @@
+import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 
 export const createDoctor = async (req, res) => {
@@ -161,12 +162,16 @@ export const getDoctorDetail = async (req, res) => {
 
 export const getAllDoctorByAdmin = async (req, res) => {
   try {
+    const admin = req.admin._id;
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 12;
     const name = req.query.name;
     const skip = (page - 1) * pageSize;
 
-    let filter = {};
+    const clinic = await Clinic.findOne({ admin });
+    if (!clinic) throw new Error("Không tìm thấy thông tin phong khám");
+
+    let filter = { clinic: clinic._id };
     if (name) {
       filter.name = { $regex: name, $options: "i" };
     }

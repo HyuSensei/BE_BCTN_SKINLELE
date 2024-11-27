@@ -1,4 +1,5 @@
 import Booking from "../models/booking.model.js";
+import Clinic from "../models/clinic.model.js";
 
 export const createBooking = async (req, res) => {
   try {
@@ -226,6 +227,60 @@ export const getAllBookingByCustomer = async (req, res) => {
       Booking.find(filter)
         .populate("doctor", "name email phone")
         .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize),
+      Booking.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: bookings,
+      pagination: {
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        totalPages: Math.ceil(total / pageSize),
+        totalItems: total,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      data: [],
+    });
+  }
+};
+
+export const getAllBookingByAdmin = async (req, res) => {
+  try {
+    const { page = 1, pageSize = 10, status, date, search } = req.query;
+    const admin = req.admin._id;
+
+    const clinic = await Clinic.findOne({ admin });
+    if (!clinic) throw new Error("Không tìm thấy thông tin phòng khám");
+
+    let filter = { clinic: clinic._id };
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (date) {
+      filter.date = new Date(date);
+    }
+
+    if (search) {
+      filter["$or"] = [
+        { "customer.name": { $regex: search, $options: "i" } },
+        { "customer.email": { $regex: search, $options: "i" } },
+        { "customer.phone": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [bookings, total] = await Promise.all([
+      Booking.find(filter)
+        .populate("user", "name email")
+        .sort({ date: 1, startTime: 1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize),
       Booking.countDocuments(filter),
