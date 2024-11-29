@@ -18,7 +18,11 @@ export const createClinic = async (req, res) => {
     const admin = req.admin._id;
 
     const existingClinic = await Clinic.findOne({
-      $or: [{ email }, { name: { $regex: new RegExp(`^${name}$`, "i") } }],
+      $or: [
+        { admin },
+        { email },
+        { name: { $regex: new RegExp(`^${name}$`, "i") } },
+      ],
     });
 
     if (existingClinic) {
@@ -41,15 +45,7 @@ export const createClinic = async (req, res) => {
       email,
       description,
       images,
-      workingHours: {
-        regularHours: workingHours?.regularHours || {
-          startDay: "Thứ 2",
-          endDay: "Thứ 6",
-          startTime: "08:00",
-          endTime: "17:00",
-        },
-        specialHours: workingHours?.specialHours || [],
-      },
+      workingHours,
     });
 
     return res.status(201).json({
@@ -70,7 +66,18 @@ export const createClinic = async (req, res) => {
 export const updateClinic = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const {
+      name,
+      email,
+      phone,
+      address,
+      description,
+      specialties,
+      logo,
+      images,
+      workingHours,
+      isActive,
+    } = req.body;
 
     const clinic = await Clinic.findById(id);
     if (!clinic) {
@@ -80,8 +87,8 @@ export const updateClinic = async (req, res) => {
       });
     }
 
-    if (updateData.email && updateData.email !== clinic.email) {
-      const existingClinic = await Clinic.findOne({ email: updateData.email });
+    if (email && email !== clinic.email) {
+      const existingClinic = await Clinic.findOne({ email });
       if (existingClinic) {
         return res.status(400).json({
           success: false,
@@ -90,9 +97,9 @@ export const updateClinic = async (req, res) => {
       }
     }
 
-    if (updateData.name && updateData.name !== clinic.name) {
+    if (name && name !== clinic.name) {
       const existingClinic = await Clinic.findOne({
-        name: { $regex: new RegExp(`^${updateData.name}$`, "i") },
+        name: { $regex: new RegExp(`^${name}$`, "i") },
         _id: { $ne: id },
       });
       if (existingClinic) {
@@ -103,24 +110,34 @@ export const updateClinic = async (req, res) => {
       }
     }
 
-    // Handle working hours update
-    if (updateData.workingHours) {
-      updateData.workingHours = {
-        regularHours: {
-          ...clinic.workingHours.regularHours,
-          ...updateData.workingHours.regularHours,
-        },
-        specialHours:
-          updateData.workingHours.specialHours ||
-          clinic.workingHours.specialHours,
-      };
+    if (workingHours) {
+      for (const hours of workingHours) {
+        if (!hours.dayOfWeek || !hours.startTime || !hours.endTime) {
+          return res.status(400).json({
+            success: false,
+            message: "Thông tin giờ làm việc không hợp lệ",
+          });
+        }
+      }
     }
 
-    const updatedClinic = await Clinic.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
+    const updateFields = {
+      ...(name && { name }),
+      ...(email && { email }),
+      ...(phone && { phone }),
+      ...(address && { address }),
+      ...(description && { description }),
+      ...(specialties && { specialties }),
+      ...(logo && { logo }),
+      ...(images && { images }),
+      ...(workingHours && { workingHours }),
+      ...(typeof isActive === "boolean" && { isActive }),
+    };
+
+    const updatedClinic = await Clinic.findByIdAndUpdate(id, updateFields, {
+      new: true,
+      runValidators: true,
+    });
 
     return res.status(200).json({
       success: true,

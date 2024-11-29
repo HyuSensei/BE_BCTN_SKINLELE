@@ -3,7 +3,7 @@ import Doctor from "../models/doctor.model.js";
 
 export const createDoctor = async (req, res) => {
   try {
-    const clinic = req.admin._id;
+    const admin = req.admin._id;
     const {
       name,
       email,
@@ -17,6 +17,15 @@ export const createDoctor = async (req, res) => {
       isIndependent = false,
     } = req.body;
 
+    const clinic = await Clinic.findOne({ admin });
+
+    if (!clinic) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin phòng khám !",
+      });
+    }
+
     const existingDoctor = await Doctor.findOne({ email });
     if (existingDoctor) {
       return res.status(400).json({
@@ -26,6 +35,7 @@ export const createDoctor = async (req, res) => {
     }
 
     const newDoctor = new Doctor({
+      clinic: clinic._id,
       name,
       email,
       password,
@@ -58,7 +68,18 @@ export const createDoctor = async (req, res) => {
 export const updateDoctor = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, password, about, phone, fees, avatar } = req.body;
+    const {
+      name,
+      email,
+      password,
+      about,
+      phone,
+      fees,
+      avatar,
+      specialty,
+      experience,
+      isActive,
+    } = req.body;
 
     const doctor = await Doctor.findById(id);
     if (!doctor) {
@@ -87,6 +108,7 @@ export const updateDoctor = async (req, res) => {
     if (avatar) doctor.avatar = avatar;
     if (specialty) doctor.specialty = specialty;
     if (experience) doctor.experience = experience;
+    if (isActive) doctor.isActive = isActive;
 
     const updatedDoctor = await doctor.save();
 

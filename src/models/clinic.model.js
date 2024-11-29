@@ -51,7 +51,8 @@ const ClinicSchema = new mongoose.Schema(
     },
     slug: {
       type: String,
-      required: true,
+      lowercase: true,
+      unique: true,
     },
     images: [
       {
@@ -69,32 +70,27 @@ const ClinicSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    workingHours: {
-      regularHours: {
-        startDay: {
+    workingHours: [
+      {
+        dayOfWeek: {
           type: String,
           enum: weekdays,
           required: true,
         },
-        endDay: {
+        startTime: {
           type: String,
-          enum: weekdays,
           required: true,
         },
-        startTime: String,
-        endTime: String,
+        endTime: {
+          type: String,
+          required: true,
+        },
+        isOpen: {
+          type: Boolean,
+          default: false,
+        },
       },
-      specialHours: [
-        {
-          day: {
-            type: String,
-            enum: weekdays,
-          },
-          startTime: String,
-          endTime: String,
-        },
-      ],
-    },
+    ],
   },
   { timestamps: true }
 );
