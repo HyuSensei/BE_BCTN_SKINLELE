@@ -33,6 +33,18 @@ const ClinicSchema = new mongoose.Schema(
         default: "",
       },
     },
+    banners: [
+      {
+        url: {
+          type: String,
+          required: true,
+        },
+        publicId: {
+          type: String,
+          default: "",
+        },
+      },
+    ],
     address: {
       type: String,
       required: true,

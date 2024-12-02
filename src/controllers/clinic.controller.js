@@ -8,6 +8,7 @@ export const createClinic = async (req, res) => {
       specialties,
       name,
       logo,
+      banners,
       address,
       phone,
       email,
@@ -40,6 +41,7 @@ export const createClinic = async (req, res) => {
       specialties,
       name,
       logo,
+      banners,
       address,
       phone,
       email,
@@ -75,6 +77,7 @@ export const updateClinic = async (req, res) => {
       specialties,
       logo,
       images,
+      banners,
       workingHours,
       isActive,
     } = req.body;
@@ -129,6 +132,7 @@ export const updateClinic = async (req, res) => {
       ...(description && { description }),
       ...(specialties && { specialties }),
       ...(logo && { logo }),
+      ...(banners && { banners }),
       ...(images && { images }),
       ...(workingHours && { workingHours }),
       ...(typeof isActive === "boolean" && { isActive }),
@@ -364,6 +368,158 @@ export const getDetailClinic = async (req, res) => {
       success: false,
       message: "Lỗi khi lấy chi tiết phòng khám",
       error: error.message,
+    });
+  }
+};
+
+export const getCliniDetailByAdmin = async (req, res) => {
+  try {
+    const admin = req.admin._id;
+    const clinic = await Clinic.findOne({ admin }).populate(
+      "admin",
+      "name email"
+    );
+
+    if (!clinic) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin phòng khám",
+      });
+    }
+
+    const [doctors, reviews, reviewStats] = await Promise.all([
+      Doctor.find({ clinic: clinic._id, isActive: true })
+        .select("-password")
+        .sort({ createdAt: -1 }),
+      ReviewClinic.find({ clinic: clinic._id })
+        .populate("user", "name avatar")
+        .sort({ createdAt: -1 })
+        .limit(5),
+      ReviewClinic.aggregate([
+        { $match: { clinic: clinic._id } },
+        {
+          $group: {
+            _id: null,
+            averageRating: { $avg: "$rate" },
+            totalReviews: { $sum: 1 },
+            ratingDistribution: {
+              $push: "$rate",
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const stats = reviewStats[0] || {
+      averageRating: 0,
+      totalReviews: 0,
+      ratingDistribution: [],
+    };
+
+    const ratingDistribution = stats.ratingDistribution.reduce(
+      (acc, rating) => {
+        acc[rating] = (acc[rating] || 0) + 1;
+        return acc;
+      },
+      {}
+    );
+
+    const clinicDetail = {
+      ...clinic.toObject(),
+      doctors,
+      reviews,
+      statistics: {
+        doctorCount: doctors.length,
+        averageRating: Number(stats.averageRating?.toFixed(1)) || 0,
+        totalReviews: stats.totalReviews || 0,
+        ratingDistribution,
+      },
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: clinicDetail,
+    });
+  } catch (error) {
+    console.error("Get clinic detail error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy chi tiết phòng khám",
+      error: error.message,
+    });
+  }
+};
+
+export const updateClinicByOwner = async (req, res) => {
+  try {
+    const adminId = req.admin._id;
+    const {
+      name,
+      email,
+      phone,
+      address,
+      description,
+      specialties,
+      logo,
+      images,
+      banners,
+      workingHours,
+    } = req.body;
+
+    const clinic = await Clinic.findOne({ admin: adminId });
+    if (!clinic) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin phòng khám",
+      });
+    }
+
+    if (email && email !== clinic.email) {
+      const existingClinic = await Clinic.findOne({ email });
+      if (existingClinic) {
+        return res.status(400).json({
+          success: false,
+          message: "Email phòng khám đã tồn tại trong hệ thống",
+        });
+      }
+    }
+
+    const updatedClinic = await Clinic.findOneAndUpdate(
+      { admin: adminId },
+      {
+        $set: {
+          name,
+          email,
+          phone,
+          address,
+          description,
+          specialties,
+          logo,
+          images,
+          banners,
+          workingHours,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedClinic) {
+      return res.status(500).json({
+        success: false,
+        message: "Cập nhật phòng khám thất bại",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật phòng khám thành công",
+      data: updatedClinic,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: "Đã xảy ra lỗi khi cập nhật phòng khám",
     });
   }
 };

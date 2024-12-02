@@ -2,8 +2,10 @@ import express from "express";
 import {
   createClinic,
   getAllClinic,
+  getCliniDetailByAdmin,
   removeClinic,
   updateClinic,
+  updateClinicByOwner,
 } from "../../controllers/clinic.controller.js";
 import {
   getAllReviewClinic,
@@ -16,10 +18,20 @@ import { accessRole, ADMIN_ROLE, CLINIC_ROLE } from "../../ultis/getRole.js";
 const router = express.Router();
 
 router.post("/", authMiddlewareAdmin(accessRole([CLINIC_ROLE])), createClinic);
+router.get(
+  "/detail",
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  getCliniDetailByAdmin
+);
 router.put(
   "/:id",
   authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
   updateClinic
+);
+router.post(
+  "/owner",
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  updateClinicByOwner
 );
 router.delete("/:id", removeClinic);
 router.get("/", authMiddlewareAdmin(accessRole([ADMIN_ROLE])), getAllClinic);

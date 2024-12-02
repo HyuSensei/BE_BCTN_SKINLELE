@@ -6,6 +6,7 @@ import { generateOTP } from "../ultis/generateOTP.js";
 import { sendEmail } from "../configs/mail.js";
 import Admin from "../models/admin.model.js";
 import Doctor from "../models/doctor.model.js";
+import Clinic from "../models/clinic.model.js";
 
 const generateTokenDoctor = (doctor) => {
   return jwt.sign(
@@ -351,6 +352,12 @@ export const getAccountAdmin = async (req, res) => {
       });
     }
 
+    let clinic = null;
+    if (adminDetails.role === "CLINIC") {
+      clinic = await Clinic.findOne({ admin: adminDetails._id }).select(
+        "-__v -createdAt -updatedAt"
+      );
+    }
     return res.status(200).json({
       success: true,
       data: {
@@ -359,6 +366,7 @@ export const getAccountAdmin = async (req, res) => {
         username: adminDetails.username,
         avatar: adminDetails.avatar,
         role: adminDetails.role,
+        clinic: clinic || null,
       },
     });
   } catch (error) {
