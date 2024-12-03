@@ -59,10 +59,6 @@ export const DocterSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    isIndependent: {
-      type: Boolean,
-      default: false,
-    },
   },
   { timestamps: true }
 );

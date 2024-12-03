@@ -14,7 +14,6 @@ export const createDoctor = async (req, res) => {
       avatar,
       specialty,
       experience,
-      isIndependent = false,
     } = req.body;
 
     const clinic = await Clinic.findOne({ admin });
@@ -45,7 +44,6 @@ export const createDoctor = async (req, res) => {
       avatar,
       specialty,
       experience,
-      isIndependent,
     });
 
     const savedDoctor = await newDoctor.save();
