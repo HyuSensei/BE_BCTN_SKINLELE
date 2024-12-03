@@ -1,7 +1,7 @@
 import express from "express";
 import {
   createSchedule,
-  getScheduleByDoctor,
+  getScheduleBooking,
   removeSchedule,
   updateSchedule,
 } from "../../controllers/schedule.controller.js";
@@ -12,6 +12,6 @@ const router = express.Router();
 router.post("/", authMiddlewareDoctor, createSchedule);
 router.put("/:id", authMiddlewareDoctor, updateSchedule);
 router.delete("/:id", authMiddlewareDoctor, removeSchedule);
-router.get("/:doctorId", getScheduleByDoctor);
+router.get("/:doctorId", getScheduleBooking);
 
 export default router;
