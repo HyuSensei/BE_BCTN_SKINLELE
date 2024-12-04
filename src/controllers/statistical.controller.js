@@ -2,6 +2,8 @@ import Order from "../models/order.model.js";
 import User from "../models/user.model.js";
 import Product from "../models/product.model.js";
 import moment from "moment-timezone";
+import Booking from "../models/booking.model.js";
+import ReviewDoctor from "../models/review-doctor.model.js";
 
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 export const getStatistics = async (req, res) => {
@@ -202,6 +204,96 @@ export const getStatistics = async (req, res) => {
         },
         topSellingProducts,
         orderStatuses: orderStatuses[0]?.statuses,
+      },
+    });
+  } catch (error) {
+    console.log("Error fetching statistics", error);
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      data: {},
+    });
+  }
+};
+
+export const getStatisticalDoctor = async (req, res) => {
+  try {
+    const { year = moment().year(), month = moment().month() + 1 } = req.query;
+    const doctorId = req.user._id;
+
+    const startDate = moment()
+      .year(year)
+      .month(month - 1)
+      .startOf("month");
+    const endDate = moment(startDate).endOf("month");
+    const daysInMonth = endDate.date();
+
+    const bookings = await Booking.find({
+      doctor: doctorId,
+      date: {
+        $gte: startDate.toDate(),
+        $lte: endDate.toDate(),
+      },
+    });
+
+    const avgRating = await ReviewDoctor.aggregate([
+      {
+        $match: {
+          doctor: doctorId,
+          createdAt: { $gte: startDate.toDate(), $lte: endDate.toDate() },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: "$rate" },
+          totalReviews: { $sum: 1 },
+        },
+      },
+    ]);
+
+    let totalStats = {
+      totalBookings: 0,
+      revenue: 0,
+      pending: 0,
+      confirmed: 0,
+      cancelled: 0,
+      completed: 0,
+    };
+
+    const dailyStats = Array.from({ length: daysInMonth }, (_, i) => ({
+      day: i + 1,
+      totalBookings: 0,
+      revenue: 0,
+      pending: 0,
+      confirmed: 0,
+      cancelled: 0,
+      completed: 0,
+    }));
+
+    // Calculate stats
+    bookings.forEach((booking) => {
+      const day = moment(booking.date).date();
+      const dayIndex = day - 1;
+
+      // Update daily stats
+      dailyStats[dayIndex].totalBookings++;
+      dailyStats[dayIndex][booking.status]++;
+      dailyStats[dayIndex].revenue += Number(booking.price);
+
+      // Update total stats
+      totalStats.totalBookings++;
+      totalStats[booking.status]++;
+      totalStats.revenue += Number(booking.price);
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalStats,
+        averageRating: avgRating[0]?.averageRating?.toFixed(1) || 0,
+        totalReviews: avgRating[0]?.totalReviews || 0,
+        stats: dailyStats,
       },
     });
   } catch (error) {

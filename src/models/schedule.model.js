@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import moment from "moment";
 
 const ScheduleSchema = new mongoose.Schema(
   {
@@ -49,6 +50,24 @@ const ScheduleSchema = new mongoose.Schema(
         },
       },
     ],
+    holidays: [
+      {
+        type: Date,
+        validate: {
+          validator: function (value) {
+            const dateToCheck = moment(value).format("YYYY-MM-DD");
+
+            const count = this.holidays.reduce((acc, date) => {
+              const formattedDate = moment(date).format("YYYY-MM-DD");
+              return formattedDate === dateToCheck ? acc + 1 : acc;
+            }, 0);
+
+            return count <= 1;
+          },
+          message: "Ngày nghỉ này đã tồn tại trong danh sách",
+        },
+      },
+    ],
   },
   { timestamps: true }
 );
@@ -59,8 +78,18 @@ ScheduleSchema.pre("save", function (next) {
       throw new Error("Thời gian bắt đầu phải trước thời gian kết thúc");
     }
   });
+
+  if (this.holidays?.length > 0) {
+    this.holidays.sort((a, b) => a - b);
+  }
+
   next();
 });
+
+ScheduleSchema.index(
+  { doctor: 1, holidays: 1 },
+  { unique: true, sparse: true }
+);
 
 ScheduleSchema.index({ doctor: 1 });
 ScheduleSchema.index({ "schedule.dayOfWeek": 1 });

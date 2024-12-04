@@ -7,6 +7,8 @@ import { sendEmail } from "../configs/mail.js";
 import Admin from "../models/admin.model.js";
 import Doctor from "../models/doctor.model.js";
 import Clinic from "../models/clinic.model.js";
+import ReviewDoctor from "../models/review-doctor.model.js";
+import Schedule from "../models/schedule.model.js";
 
 const generateTokenDoctor = (doctor) => {
   return jwt.sign(
@@ -430,7 +432,13 @@ export const loginDoctor = async (req, res) => {
 
 export const getAccountDoctor = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.user._id).select("-password -__v");
+    const doctor = await Doctor.findById(req.user._id)
+      .select("-password -__v")
+      .populate({
+        path: "clinic",
+        select:
+          "name logo address email phone description specialties workingHours",
+      });
 
     if (!doctor) {
       return res.status(404).json({
@@ -446,6 +454,10 @@ export const getAccountDoctor = async (req, res) => {
       });
     }
 
+    const schedule = await Schedule.findOne({ doctor: doctor._id }).select(
+      "schedule holidays"
+    );
+
     return res.status(200).json({
       success: true,
       data: {
@@ -453,6 +465,14 @@ export const getAccountDoctor = async (req, res) => {
         name: doctor.name,
         email: doctor.email,
         avatar: doctor.avatar,
+        phone: doctor.phone,
+        specialty: doctor.specialty,
+        experience: doctor.experience,
+        fees: doctor.fees,
+        about: doctor.about,
+        clinic: doctor.clinic,
+        schedule: schedule.schedule || [],
+        holidays: schedule.holidays || [],
       },
     });
   } catch (error) {

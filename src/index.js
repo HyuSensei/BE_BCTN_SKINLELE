@@ -33,6 +33,7 @@ app.use(
       "Authorization",
       "X-User-Header",
       "X-Admin-Header",
+      "X-Doctor-Header",
     ],
   })
 );
