@@ -163,21 +163,34 @@ export const getBookingDetail = async (req, res) => {
 
 export const getAllBookingByDoctor = async (req, res) => {
   try {
-    const { page = 1, pageSize = 10, status, date, search } = req.query;
-    const { doctorId } = req.params;
+    const {
+      page = 1,
+      pageSize = 10,
+      status,
+      fromDate,
+      toDate,
+      search,
+    } = req.query;
+    const doctorId = req.user._id;
 
     let filter = { doctor: doctorId };
 
+    // Add status filter if provided
     if (status) {
       filter.status = status;
     }
 
-    if (date) {
-      filter.date = new Date(date);
+    // Add date range filter if provided
+    if (fromDate && toDate) {
+      filter.date = {
+        $gte: new Date(fromDate),
+        $lte: new Date(toDate),
+      };
     }
 
+    // Add search filter if provided
     if (search) {
-      filter["$or"] = [
+      filter.$or = [
         { "customer.name": { $regex: search, $options: "i" } },
         { "customer.email": { $regex: search, $options: "i" } },
         { "customer.phone": { $regex: search, $options: "i" } },
@@ -187,25 +200,29 @@ export const getAllBookingByDoctor = async (req, res) => {
     const [bookings, total] = await Promise.all([
       Booking.find(filter)
         .populate("user", "name email")
-        .sort({ date: 1, startTime: 1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize),
+        .sort({ date: -1, startTime: -1 }) // Sort by newest first
+        .skip((parseInt(page) - 1) * parseInt(pageSize))
+        .limit(parseInt(pageSize))
+        .lean(),
       Booking.countDocuments(filter),
     ]);
 
     return res.status(200).json({
       success: true,
-      data: bookings,
-      pagination: {
-        page: parseInt(page),
-        pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(total / pageSize),
-        totalItems: total,
+      data: {
+        bookings,
+        pagination: {
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalPage: Math.ceil(total / parseInt(pageSize)),
+          totalItems: total,
+        },
       },
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
+      message: "Lỗi khi lấy danh sách đặt lịch",
       error: error.message,
       data: [],
     });

@@ -20,9 +20,9 @@ router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
 router.get("/:slug", getDoctorDetail);
 router.put("/", authMiddlewareDoctor, updateDoctor);
 
-router.get("/review/:doctor", getAllReviewByDoctor);
-router.post("/review", authMiddlewareUser, createReviewDoctor);
-router.delete("/review/:id", authMiddlewareDoctor, removeReviewDoctor);
+router.get("/reviews/:doctor", getAllReviewByDoctor);
+router.post("/reviews", authMiddlewareUser, createReviewDoctor);
+router.delete("/reviews/:id", authMiddlewareDoctor, removeReviewDoctor);
 
 
 export default router;

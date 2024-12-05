@@ -18,6 +18,6 @@ router.put("/status/:id", authMiddlewareUser, updateStatusBooking);
 router.get("/detail-customer/:id", authMiddlewareUser, getBookingDetail);
 router.get("/detail-doctor/:id", authMiddlewareDoctor, getBookingDetail);
 router.get("/customer", authMiddlewareUser, getAllBookingByCustomer);
-router.get("/doctor", authMiddlewareDoctor, getAllBookingByDoctor);
+router.get("/by-doctor", authMiddlewareDoctor, getAllBookingByDoctor);
 
 export default router;

@@ -1,45 +1,92 @@
+import mongoose from "mongoose";
 import Booking from "../models/booking.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
 
 export const getAllReviewByDoctor = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 12;
+    const { page = 1, pageSize = 10, rate, search } = req.query;
     const { doctor } = req.params;
-    const skip = (page - 1) * pageSize;
 
-    const [reviews, total] = await Promise.all([
-      ReviewDoctor.find({ doctor })
+    let filter = { doctor };
+    if (rate) {
+      filter.rate = parseInt(rate);
+    }
+
+    if (search) {
+      filter.$or = [
+        { "user.name": { $regex: search, $options: "i" } },
+        { content: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const [reviews, total, ratingStats] = await Promise.all([
+      ReviewDoctor.find(filter)
         .populate("user", "name avatar")
         .populate("booking", "date")
         .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(pageSize),
-      ReviewDoctor.countDocuments({ doctor }),
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      ReviewDoctor.countDocuments(filter),
+      ReviewDoctor.aggregate([
+        {
+          $match: {
+            doctor: new mongoose.Types.ObjectId(`${doctor}`),
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            averageRating: { $avg: "$rate" },
+            totalReviews: { $sum: 1 },
+            ratingCounts: {
+              $push: "$rate",
+            },
+          },
+        },
+      ]),
     ]);
 
-    const averageRating = await ReviewDoctor.aggregate([
-      { $match: { doctor: new mongoose.Types.ObjectId(doctor) } },
-      { $group: { _id: null, average: { $avg: "$rate" } } },
-    ]);
+    const stats = ratingStats[0] || {
+      averageRating: 0,
+      totalReviews: 0,
+      ratingCounts: [],
+    };
+
+    const ratingDistribution = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+    };
+
+    stats.ratingCounts.forEach((rate) => {
+      ratingDistribution[rate] = (ratingDistribution[rate] || 0) + 1;
+    });
 
     return res.status(200).json({
       success: true,
       data: reviews,
-      averageRating: averageRating[0]?.average || 0,
+      stats: {
+        totalReviews: stats.totalReviews,
+        averageRating: Number(stats.averageRating.toFixed(1)),
+        ratingCounts: ratingDistribution,
+      },
       pagination: {
-        page,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
         totalPage: Math.ceil(total / pageSize),
         totalItems: total,
-        pageSize,
       },
     });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
       success: false,
-      data: [],
+      message: "Lỗi khi lấy danh sách đánh giá",
       error: error.message,
+      data: [],
     });
   }
 };
