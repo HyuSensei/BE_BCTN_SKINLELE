@@ -1,5 +1,6 @@
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
+import ReviewDoctor from "../models/review-doctor.model.js";
 
 export const createDoctor = async (req, res) => {
   try {
@@ -216,6 +217,120 @@ export const getAllDoctorByAdmin = async (req, res) => {
         totalItems: total,
       },
     });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      data: [],
+      error: error.message,
+    });
+  }
+};
+
+export const getDoctorsByCustomer = async (req, res) => {
+  try {
+    const { search = "", specialty = "", clinic = "" } = req.query;
+    let filter = { isActive: true };
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { specialty: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (specialty) {
+      filter.specialty = specialty;
+    }
+
+    if (clinic) {
+      filter.clinic = clinic;
+    }
+
+    // Handle pagination if page & pageSize provided
+    if (req.query.page && req.query.pageSize) {
+      const page = parseInt(req.query.page);
+      const pageSize = parseInt(req.query.pageSize);
+
+      const [doctors, total] = await Promise.all([
+        Doctor.find(filter)
+          .populate("clinic", "name")
+          .sort({ experience: -1 })
+          .skip((page - 1) * pageSize)
+          .limit(pageSize),
+        Doctor.countDocuments(filter),
+      ]);
+
+      const doctorsWithRatings = await Promise.all(
+        doctors.map(async (doctor) => {
+          const reviews = await ReviewDoctor.aggregate([
+            { $match: { doctor: doctor._id } },
+            {
+              $group: {
+                _id: null,
+                averageRating: { $avg: "$rate" },
+                totalReviews: { $sum: 1 },
+              },
+            },
+          ]);
+
+          const rating = reviews[0] || { averageRating: 0, totalReviews: 0 };
+          return {
+            ...doctor.toObject(),
+            averageRating: rating.averageRating,
+            totalReviews: rating.totalReviews,
+          };
+        })
+      );
+
+      const hasMore = page * pageSize < total;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          doctors: doctorsWithRatings,
+          hasMore,
+          total,
+        },
+      });
+
+      // Return all results if no pagination
+    } else {
+      const doctors = await Doctor.find(filter)
+        .populate("clinic", "name")
+        .sort({ experience: -1 });
+
+      const doctorsWithRatings = await Promise.all(
+        doctors.map(async (doctor) => {
+          const reviews = await ReviewDoctor.aggregate([
+            { $match: { doctor: doctor._id } },
+            {
+              $group: {
+                _id: null,
+                averageRating: { $avg: "$rate" },
+                totalReviews: { $sum: 1 },
+              },
+            },
+          ]);
+
+          const rating = reviews[0] || { averageRating: 0, totalReviews: 0 };
+          return {
+            ...doctor.toObject(),
+            averageRating: rating.averageRating,
+            totalReviews: rating.totalReviews,
+          };
+        })
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          doctors: doctorsWithRatings,
+          total: doctors.length,
+        },
+      });
+    }
   } catch (error) {
     console.log(error);
     return res.status(500).json({

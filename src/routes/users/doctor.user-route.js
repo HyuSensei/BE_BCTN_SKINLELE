@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getDoctorDetail,
+  getDoctorsByCustomer,
   updateDoctor,
 } from "../../controllers/doctor.controller.js";
 import {
@@ -17,6 +18,7 @@ import { getStatisticalDoctor } from "../../controllers/statistical.controller.j
 const router = express.Router();
 
 router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
+router.get("/by-customer", getDoctorsByCustomer);
 router.get("/:slug", getDoctorDetail);
 router.put("/", authMiddlewareDoctor, updateDoctor);
 

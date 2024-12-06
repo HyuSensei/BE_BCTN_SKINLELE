@@ -523,3 +523,66 @@ export const updateClinicByOwner = async (req, res) => {
     });
   }
 };
+
+export const getClinicsByCustomer = async (req, res) => {
+  try {
+    const { search = "", specialty = "" } = req.query;
+    let filter = { isActive: true };
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { address: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (specialty) {
+      filter.specialties = { $in: [specialty] };
+    }
+
+    // If page & pageSize provided, do pagination
+    if (req.query.page && req.query.pageSize) {
+      const page = parseInt(req.query.page);
+      const pageSize = parseInt(req.query.pageSize);
+
+      const [clinics, total] = await Promise.all([
+        Clinic.find(filter)
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * pageSize)
+          .limit(pageSize)
+          .lean(),
+        Clinic.countDocuments(filter),
+      ]);
+
+      const hasMore = page * pageSize < total;
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          clinics,
+          hasMore,
+          total,
+        },
+      });
+
+      // Otherwise return all results
+    } else {
+      const clinics = await Clinic.find(filter).sort({ createdAt: -1 }).lean();
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          clinics,
+          total: clinics.length,
+        },
+      });
+    }
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      data: [],
+      error: error.message,
+    });
+  }
+};
