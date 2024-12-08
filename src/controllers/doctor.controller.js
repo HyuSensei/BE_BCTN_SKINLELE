@@ -158,7 +158,10 @@ export const getDoctorDetail = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const doctor = await Doctor.findOne({ slug }).select("-password");
+    const doctor = await Doctor.findOne({ slug })
+      .select("-__v -createdAt -updatedAt -password")
+      .lean();
+
     if (!doctor) {
       return res.status(404).json({
         success: false,
@@ -167,9 +170,30 @@ export const getDoctorDetail = async (req, res) => {
       });
     }
 
+    const reviewStats = await ReviewDoctor.aggregate([
+      {
+        $match: { doctor: doctor._id },
+      },
+      {
+        $group: {
+          _id: null,
+          rating: { $avg: "$rate" },
+          totalReviews: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const stats = reviewStats[0] || { rating: 0, totalReviews: 0 };
+
+    const doctorWithStats = {
+      ...doctor,
+      rating: Number(stats.rating?.toFixed(1)) || 0,
+      totalReviews: stats.totalReviews,
+    };
+
     return res.status(200).json({
       success: true,
-      data: doctor,
+      data: doctorWithStats,
     });
   } catch (error) {
     console.log(error);
@@ -248,7 +272,6 @@ export const getDoctorsByCustomer = async (req, res) => {
       filter.clinic = clinic;
     }
 
-    // Handle pagination if page & pageSize provided
     if (req.query.page && req.query.pageSize) {
       const page = parseInt(req.query.page);
       const pageSize = parseInt(req.query.pageSize);
@@ -278,8 +301,8 @@ export const getDoctorsByCustomer = async (req, res) => {
           const rating = reviews[0] || { averageRating: 0, totalReviews: 0 };
           return {
             ...doctor.toObject(),
-            averageRating: rating.averageRating,
-            totalReviews: rating.totalReviews,
+            rating: Number(rating.averageRating?.toFixed(1)) || 0,
+            reviewCount: rating.totalReviews || 0,
           };
         })
       );
@@ -294,8 +317,6 @@ export const getDoctorsByCustomer = async (req, res) => {
           total,
         },
       });
-
-      // Return all results if no pagination
     } else {
       const doctors = await Doctor.find(filter)
         .populate("clinic", "name")
@@ -317,8 +338,8 @@ export const getDoctorsByCustomer = async (req, res) => {
           const rating = reviews[0] || { averageRating: 0, totalReviews: 0 };
           return {
             ...doctor.toObject(),
-            averageRating: rating.averageRating,
-            totalReviews: rating.totalReviews,
+            rating: Number(rating.averageRating?.toFixed(1)) || 0, // Formatted rating
+            reviewCount: rating.totalReviews || 0, // Renamed to reviewCount
           };
         })
       );

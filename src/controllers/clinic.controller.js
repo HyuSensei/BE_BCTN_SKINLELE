@@ -297,10 +297,9 @@ export const getDetailClinic = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const clinic = await Clinic.findOne({ slug }).populate(
-      "admin",
-      "name email"
-    );
+    const clinic = await Clinic.findOne({ slug, isActive: true })
+      .select("-__v -createdAt -updatedAt")
+      .populate("admin", "name email");
 
     if (!clinic) {
       return res.status(404).json({
@@ -309,14 +308,8 @@ export const getDetailClinic = async (req, res) => {
       });
     }
 
-    const [doctors, reviews, reviewStats] = await Promise.all([
-      Doctor.find({ clinic: clinic._id, isActive: true })
-        .select("-password")
-        .sort({ createdAt: -1 }),
-      ReviewClinic.find({ clinic: clinic._id })
-        .populate("user", "name avatar")
-        .sort({ createdAt: -1 })
-        .limit(5),
+    // Get clinic reviews stats
+    const [reviewStats, doctorCount] = await Promise.all([
       ReviewClinic.aggregate([
         { $match: { clinic: clinic._id } },
         {
@@ -330,6 +323,7 @@ export const getDetailClinic = async (req, res) => {
           },
         },
       ]),
+      Doctor.countDocuments({ clinic: clinic._id, isActive: true }),
     ]);
 
     const stats = reviewStats[0] || {
@@ -338,22 +332,21 @@ export const getDetailClinic = async (req, res) => {
       ratingDistribution: [],
     };
 
+    // Calculate rating distribution
     const ratingDistribution = stats.ratingDistribution.reduce(
       (acc, rating) => {
         acc[rating] = (acc[rating] || 0) + 1;
         return acc;
       },
-      {}
+      { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
     );
 
     const clinicDetail = {
       ...clinic.toObject(),
-      doctors,
-      reviews,
       statistics: {
-        doctorCount: doctors.length,
+        doctorCount,
+        reviewCount: stats.totalReviews,
         averageRating: Number(stats.averageRating?.toFixed(1)) || 0,
-        totalReviews: stats.totalReviews || 0,
         ratingDistribution,
       },
     };
