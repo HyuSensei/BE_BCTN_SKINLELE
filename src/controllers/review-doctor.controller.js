@@ -67,17 +67,19 @@ export const getAllReviewByDoctor = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: reviews,
-      stats: {
-        totalReviews: stats.totalReviews,
-        averageRating: Number(stats.averageRating.toFixed(1)),
-        ratingCounts: ratingDistribution,
-      },
-      pagination: {
-        page: parseInt(page),
-        pageSize: parseInt(pageSize),
-        totalPage: Math.ceil(total / pageSize),
-        totalItems: total,
+      data: {
+        reviews,
+        stats: {
+          totalReviews: stats.totalReviews,
+          averageRating: Number(stats.averageRating.toFixed(1)),
+          ratingDistribution,
+        },
+        pagination: {
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalPage: Math.ceil(total / pageSize),
+          totalItems: total,
+        },
       },
     });
   } catch (error) {

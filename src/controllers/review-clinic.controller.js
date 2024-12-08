@@ -104,6 +104,15 @@ export const getAllReviewClinic = async (req, res) => {
       ReviewClinic.countDocuments(filter),
     ]);
 
+    // Initialize default rating distribution with all ratings set to 0
+    const defaultRatingDistribution = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+    };
+
     const stats = await ReviewClinic.aggregate([
       { $match: filter },
       {
@@ -117,25 +126,36 @@ export const getAllReviewClinic = async (req, res) => {
       },
     ]);
 
+    // Merge actual ratings with default distribution
     const ratingDistribution =
-      stats[0]?.ratingDistribution.reduce((acc, rate) => {
-        acc[rate] = (acc[rate] || 0) + 1;
-        return acc;
-      }, {}) || {};
+      stats[0]?.ratingDistribution.reduce(
+        (acc, rate) => {
+          acc[rate] = (acc[rate] || 0) + 1;
+          return acc;
+        },
+        { ...defaultRatingDistribution }
+      ) || defaultRatingDistribution;
+
+    const currentPage = parseInt(page);
+    const totalPages = Math.ceil(total / parseInt(pageSize));
+    const hasMore = currentPage < totalPages;
 
     return res.status(200).json({
       success: true,
-      data: reviews,
-      pagination: {
-        page: parseInt(page),
-        pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(total / pageSize),
-        totalItems: total,
-      },
-      statistics: {
-        averageRating: stats[0]?.averageRating || 0,
-        totalReviews: total,
-        ratingDistribution,
+      data: {
+        reviews,
+        pagination: {
+          page: currentPage,
+          pageSize: parseInt(pageSize),
+          totalPage: totalPages,
+          totalItems: total,
+        },
+        hasMore,
+        statistics: {
+          averageRating: stats[0]?.averageRating || 0,
+          totalReviews: total,
+          ratingDistribution,
+        },
       },
     });
   } catch (error) {
@@ -143,7 +163,7 @@ export const getAllReviewClinic = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy danh sách đánh giá",
-      error: error.message,
+      error: error.message
     });
   }
 };

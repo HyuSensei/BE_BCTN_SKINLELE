@@ -12,7 +12,7 @@ import { authMiddlewareUser } from "../../middleware/auth.middleware.js";
 const router = express.Router();
 
 router.get("/by-customer", getClinicsByCustomer);
-router.get("/reviews/:clinic", getAllReviewClinic);
+router.get("/reviews", getAllReviewClinic);
 router.get("/:slug", getDetailClinic);
 router.post("/reviews", authMiddlewareUser, createReviewClinic);
 
