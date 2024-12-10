@@ -1,16 +1,19 @@
 import moment from "moment";
 
 export const getDayNumber = (dayOfWeek) => {
-  const days = {
-    "Thứ 2": 1,
-    "Thứ 3": 2,
-    "Thứ 4": 3,
-    "Thứ 5": 4,
-    "Thứ 6": 5,
-    "Thứ 7": 6,
-    "Chủ nhật": 0,
+  const day = moment(dayOfWeek).day();
+
+  const daysMap = {
+    0: "Chủ nhật",
+    1: "Thứ 2",
+    2: "Thứ 3",
+    3: "Thứ 4",
+    4: "Thứ 5",
+    5: "Thứ 6",
+    6: "Thứ 7",
   };
-  return days[dayOfWeek];
+
+  return daysMap[day];
 };
 
 export const generateAvailableTimeSlots = (

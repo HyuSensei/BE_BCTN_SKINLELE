@@ -236,12 +236,10 @@ export const getScheduleBooking = async (req, res) => {
       });
     }
 
-    const weekStart = targetDate.clone().startOf("week");
-    const weekEnd = targetDate.clone().endOf("week");
-
     const schedule = await Schedule.findOne({ doctor: doctorId })
       .populate("doctor", "-password")
-      .populate("clinic", "name workingHours");
+      .populate("clinic", "name workingHours")
+      .lean();
 
     if (!schedule) {
       return res.status(404).json({
@@ -250,59 +248,52 @@ export const getScheduleBooking = async (req, res) => {
       });
     }
 
+    // Find the schedule for the target date
+    const targetDayOfWeek = getDayNumber(targetDate);
+    const daySchedule = schedule.schedule.find(
+      (day) => day.dayOfWeek === targetDayOfWeek
+    );
+
+    if (!daySchedule) {
+      return res.status(404).json({
+        success: false,
+        message: "Không có lịch làm việc cho ngày này",
+      });
+    }
+
+    // Check if the date is a holiday
+    const isHoliday = schedule.holidays.some(
+      (holiday) =>
+        moment(holiday).format("YYYY-MM-DD") === targetDate.format("YYYY-MM-DD")
+    );
+
+    // Get bookings for the target date
     const bookings = await Booking.find({
       doctor: doctorId,
-      date: {
-        $gte: weekStart.toDate(),
-        $lte: weekEnd.toDate(),
-      },
+      date: targetDate.toDate(),
       status: { $in: ["pending", "confirmed"] },
     });
 
-    const processedSchedule = schedule.schedule.map((day) => {
-      const dayDate = weekStart
-        .clone()
-        .day(getDayNumber(day.dayOfWeek))
-        .format("YYYY-MM-DD");
-
-      const isHoliday = schedule.holidays.some(
-        (holiday) => moment(holiday).format("YYYY-MM-DD") === dayDate
-      );
-
-      const dayBookings = bookings.filter(
-        (booking) => moment(booking.date).format("YYYY-MM-DD") === dayDate
-      );
-
-      return {
-        dayOfWeek: day.dayOfWeek,
-        date: dayDate,
-        startTime: day.startTime,
-        endTime: day.endTime,
-        duration: day.duration,
-        breakTime: day.breakTime,
-        isActive: day.isActive,
-        isToday: dayDate === today.format("YYYY-MM-DD"),
-        isHoliday: isHoliday,
-        timeSlots:
-          !day.isActive || isHoliday
-            ? []
-            : generateAvailableTimeSlots(
-                day.startTime,
-                day.endTime,
-                day.duration,
-                day.breakTime,
-                dayBookings
-              ),
-      };
-    });
+    // Process schedule for the target date
+    const timeSlots =
+      !daySchedule.isActive || isHoliday
+        ? []
+        : generateAvailableTimeSlots(
+            daySchedule.startTime,
+            daySchedule.endTime,
+            daySchedule.duration,
+            daySchedule.breakTime,
+            bookings
+          );
 
     return res.status(200).json({
       success: true,
       data: {
-        doctor: schedule.doctor,
-        clinic: schedule.clinic,
-        schedule: processedSchedule,
-        holidays: schedule.holidays,
+        date: targetDate.format("YYYY-MM-DD"),
+        dayOfWeek: daySchedule.dayOfWeek,
+        isToday: targetDate.isSame(today, "day"),
+        isHoliday,
+        timeSlots,
       },
     });
   } catch (error) {
