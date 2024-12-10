@@ -107,7 +107,7 @@ export const updateDoctor = async (req, res) => {
     if (avatar) doctor.avatar = avatar;
     if (specialty) doctor.specialty = specialty;
     if (experience) doctor.experience = experience;
-    if (isActive) doctor.isActive = isActive;
+    if (isActive !== undefined) doctor.isActive = isActive;
 
     const updatedDoctor = await doctor.save();
 

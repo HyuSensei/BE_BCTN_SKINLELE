@@ -454,7 +454,7 @@ export const getAccountDoctor = async (req, res) => {
       });
     }
 
-    const schedule = await Schedule.findOne({ doctor: doctor._id }).select(
+    const resSchedule = await Schedule.findOne({ doctor: doctor._id }).select(
       "schedule holidays"
     );
 
@@ -471,8 +471,8 @@ export const getAccountDoctor = async (req, res) => {
         fees: doctor.fees,
         about: doctor.about,
         clinic: doctor.clinic,
-        schedule: schedule.schedule || [],
-        holidays: schedule.holidays || [],
+        schedule: resSchedule?.schedule || [],
+        holidays: resSchedule?.holidays || [],
       },
     });
   } catch (error) {

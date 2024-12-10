@@ -7,11 +7,13 @@ const ScheduleSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Doctor",
       required: true,
+      unique: true,
     },
     clinic: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Clinic",
       required: true,
+      unique: true,
     },
     schedule: [
       {

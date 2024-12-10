@@ -3,6 +3,11 @@ import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import Booking from "../models/booking.model.js";
 import moment from "moment";
+import { convertToVietnameseDay } from "../helpers/convert.js";
+import {
+  generateAvailableTimeSlots,
+  getDayNumber,
+} from "../helpers/schedule.js";
 
 export const createSchedule = async (req, res) => {
   try {
@@ -97,8 +102,9 @@ export const updateSchedule = async (req, res) => {
   try {
     const { id } = req.params;
     const { schedule, holidays } = req.body;
+    const updateFields = {};
 
-    const existingSchedule = await Schedule.findById(id).populate(
+    const existingSchedule = await Schedule.findOne({ doctor: id }).populate(
       "clinic",
       "workingHours"
     );
@@ -110,29 +116,37 @@ export const updateSchedule = async (req, res) => {
       });
     }
 
-    for (const slot of schedule) {
-      const clinicHours = existingSchedule.clinic.workingHours.find(
-        (h) => h.dayOfWeek === slot.dayOfWeek
-      );
+    if (schedule) {
+      for (const slot of schedule) {
+        const clinicHours = existingSchedule.clinic.workingHours.find(
+          (h) => h.dayOfWeek === slot.dayOfWeek
+        );
 
-      if (!clinicHours.isOpen) {
-        return res.status(400).json({
-          success: false,
-          message: `Phòng khám đóng cửa vào ${slot.dayOfWeek}`,
-        });
+        if (!clinicHours.isOpen) {
+          return res.status(400).json({
+            success: false,
+            message: `Phòng khám đóng cửa vào ${slot.dayOfWeek}`,
+          });
+        }
+
+        const slotStart = moment(slot.startTime, "HH:mm");
+        const slotEnd = moment(slot.endTime, "HH:mm");
+        const clinicStart = moment(clinicHours.startTime, "HH:mm");
+        const clinicEnd = moment(clinicHours.endTime, "HH:mm");
+
+        if (slotStart < clinicStart || slotEnd > clinicEnd) {
+          return res.status(400).json({
+            success: false,
+            message: `Thời gian làm việc phải nằm trong khung giờ phòng khám (${clinicHours.startTime} - ${clinicHours.endTime})`,
+          });
+        }
       }
 
-      const slotStart = moment(slot.startTime, "HH:mm");
-      const slotEnd = moment(slot.endTime, "HH:mm");
-      const clinicStart = moment(clinicHours.startTime, "HH:mm");
-      const clinicEnd = moment(clinicHours.endTime, "HH:mm");
+      updateFields.schedule = schedule;
+    }
 
-      if (slotStart < clinicStart || slotEnd > clinicEnd) {
-        return res.status(400).json({
-          success: false,
-          message: `Thời gian làm việc phải nằm trong khung giờ phòng khám (${clinicHours.startTime} - ${clinicHours.endTime})`,
-        });
-      }
+    if (holidays) {
+      updateFields.holidays = holidays.map((date) => new Date(date));
     }
 
     const existingBookings = await Booking.find({
@@ -141,26 +155,29 @@ export const updateSchedule = async (req, res) => {
     });
 
     if (existingBookings.length > 0) {
-      for (const booking of existingBookings) {
-        const bookingDay = moment(booking.date).format("dddd");
-        const daySchedule = schedule.find((s) => s.dayOfWeek === bookingDay);
+      if (schedule) {
+        for (const booking of existingBookings) {
+          const bookingDay = convertToVietnameseDay(booking.date);
+          const daySchedule = schedule.find((s) => s.dayOfWeek === bookingDay);
 
-        if (daySchedule) {
-          const bookingStart = moment(booking.startTime, "HH:mm");
-          const bookingEnd = moment(booking.endTime, "HH:mm");
-          const scheduleStart = moment(daySchedule.startTime, "HH:mm");
-          const scheduleEnd = moment(daySchedule.endTime, "HH:mm");
+          if (daySchedule) {
+            const bookingStart = moment(booking.startTime, "HH:mm");
+            const bookingEnd = moment(booking.endTime, "HH:mm");
+            const scheduleStart = moment(daySchedule.startTime, "HH:mm");
+            const scheduleEnd = moment(daySchedule.endTime, "HH:mm");
 
-          if (bookingStart < scheduleStart || bookingEnd > scheduleEnd) {
-            return res.status(400).json({
-              success: false,
-              message: "Không thể cập nhật do xung đột với lịch hẹn hiện tại",
-            });
+            if (bookingStart < scheduleStart || bookingEnd > scheduleEnd) {
+              return res.status(400).json({
+                success: false,
+                message: "Không thể cập nhật do xung đột với lịch hẹn hiện tại",
+              });
+            }
           }
         }
+      }
 
-        // Check if booking date falls on a new holiday
-        if (holidays) {
+      if (holidays) {
+        for (const booking of existingBookings) {
           const bookingDate = moment(booking.date).startOf("day");
           const isHoliday = holidays.some((holiday) =>
             moment(holiday).startOf("day").isSame(bookingDate)
@@ -176,16 +193,16 @@ export const updateSchedule = async (req, res) => {
       }
     }
 
-    const formattedHolidays = holidays
-      ? holidays.map((date) => new Date(date))
-      : existingSchedule.holidays;
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Không có thông tin nào được cập nhật",
+      });
+    }
 
     const updatedSchedule = await Schedule.findByIdAndUpdate(
-      id,
-      {
-        schedule,
-        holidays: formattedHolidays,
-      },
+      existingSchedule._id,
+      updateFields,
       { new: true }
     );
 
@@ -248,7 +265,6 @@ export const getScheduleBooking = async (req, res) => {
         .day(getDayNumber(day.dayOfWeek))
         .format("YYYY-MM-DD");
 
-      // Check if the day is a holiday
       const isHoliday = schedule.holidays.some(
         (holiday) => moment(holiday).format("YYYY-MM-DD") === dayDate
       );
@@ -264,23 +280,27 @@ export const getScheduleBooking = async (req, res) => {
         endTime: day.endTime,
         duration: day.duration,
         breakTime: day.breakTime,
+        isActive: day.isActive,
         isToday: dayDate === today.format("YYYY-MM-DD"),
         isHoliday: isHoliday,
-        timeSlots: isHoliday
-          ? []
-          : generateAvailableTimeSlots(
-              day.startTime,
-              day.endTime,
-              day.duration,
-              day.breakTime,
-              dayBookings
-            ),
+        timeSlots:
+          !day.isActive || isHoliday
+            ? []
+            : generateAvailableTimeSlots(
+                day.startTime,
+                day.endTime,
+                day.duration,
+                day.breakTime,
+                dayBookings
+              ),
       };
     });
 
     return res.status(200).json({
       success: true,
       data: {
+        doctor: schedule.doctor,
+        clinic: schedule.clinic,
         schedule: processedSchedule,
         holidays: schedule.holidays,
       },
@@ -294,56 +314,6 @@ export const getScheduleBooking = async (req, res) => {
     });
   }
 };
-
-function getDayNumber(dayOfWeek) {
-  const days = {
-    "Thứ 2": 1,
-    "Thứ 3": 2,
-    "Thứ 4": 3,
-    "Thứ 5": 4,
-    "Thứ 6": 5,
-    "Thứ 7": 6,
-    "Chủ nhật": 0,
-  };
-  return days[dayOfWeek];
-}
-
-// Helper function to generate available time slots
-function generateAvailableTimeSlots(
-  startTime,
-  endTime,
-  duration,
-  breakTime,
-  bookings
-) {
-  const slots = [];
-  let currentTime = moment(startTime, "HH:mm");
-  const endTimeObj = moment(endTime, "HH:mm");
-
-  while (currentTime.isBefore(endTimeObj)) {
-    const slotTime = currentTime.format("HH:mm");
-
-    // Skip break time
-    if (breakTime && slotTime >= breakTime.start && slotTime < breakTime.end) {
-      currentTime.add(duration, "minutes");
-      continue;
-    }
-
-    // Check if slot is available
-    const isBooked = bookings.some((booking) => booking.startTime === slotTime);
-
-    if (!isBooked) {
-      slots.push({
-        startTime: slotTime,
-        endTime: currentTime.add(duration, "minutes").format("HH:mm"),
-      });
-    } else {
-      currentTime.add(duration, "minutes");
-    }
-  }
-
-  return slots;
-}
 
 export const removeSchedule = async (req, res) => {
   try {
