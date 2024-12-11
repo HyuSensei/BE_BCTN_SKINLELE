@@ -85,6 +85,9 @@ const BookingSchema = new mongoose.Schema(
           type: String,
           enum: ["User", "Doctor"],
         },
+        date: {
+          type: Date,
+        }
       },
     ],
   },

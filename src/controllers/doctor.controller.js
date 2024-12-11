@@ -160,6 +160,7 @@ export const getDoctorDetail = async (req, res) => {
 
     const doctor = await Doctor.findOne({ slug })
       .select("-__v -createdAt -updatedAt -password")
+      .populate("clinic")
       .lean();
 
     if (!doctor) {
