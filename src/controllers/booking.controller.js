@@ -1,3 +1,4 @@
+import { convertToVietnameseDay } from "../helpers/convert.js";
 import Booking from "../models/booking.model.js";
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
@@ -5,10 +6,19 @@ import Schedule from "../models/schedule.model.js";
 
 export const createBooking = async (req, res) => {
   try {
-    const { clinic, doctor, date, startTime, endTime, customer, price, note } = req.body;
+    const { clinic, doctor, date, startTime, endTime, customer, price, note } =
+      req.body;
     const user = req.user._id;
 
-    if (!clinic || !doctor || !date || !startTime || !endTime || !customer || !price) {
+    if (
+      !clinic ||
+      !doctor ||
+      !date ||
+      !startTime ||
+      !endTime ||
+      !customer ||
+      !price
+    ) {
       return res.status(400).json({
         success: false,
         message: "Vui lòng điền đầy đủ thông tin đặt lịch",
@@ -16,25 +26,25 @@ export const createBooking = async (req, res) => {
     }
 
     const clinicExists = await Clinic.findOne({
-      _id:clinic,
-      isActive: true
+      _id: clinic,
+      isActive: true,
     });
     if (!clinicExists || !clinicExists.isActive) {
       return res.status(404).json({
         success: false,
-        message: "Phòng khám không tồn tại hoặc đã ngừng hoạt động"
+        message: "Phòng khám không tồn tại hoặc đã ngừng hoạt động",
       });
     }
 
     const doctorExists = await Doctor.findOne({
       _id: doctor,
       clinic: clinic,
-      isActive: true
+      isActive: true,
     });
     if (!doctorExists) {
       return res.status(404).json({
         success: false,
-        message: "Bác sĩ không tồn tại hoặc không thuộc phòng khám này"
+        message: "Bác sĩ không tồn tại hoặc không thuộc phòng khám này",
       });
     }
 
@@ -45,7 +55,7 @@ export const createBooking = async (req, res) => {
     if (bookingDate < today) {
       return res.status(400).json({
         success: false,
-        message: "Ngày đặt lịch không hợp lệ"
+        message: "Ngày đặt lịch không hợp lệ",
       });
     }
 
@@ -53,16 +63,19 @@ export const createBooking = async (req, res) => {
     if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
       return res.status(400).json({
         success: false,
-        message: "Định dạng thời gian không hợp lệ"
+        message: "Định dạng thời gian không hợp lệ",
       });
     }
 
-    const [startHour, startMinute] = startTime.split(':').map(Number);
-    const [endHour, endMinute] = endTime.split(':').map(Number);
-    if (startHour > endHour || (startHour === endHour && startMinute >= endMinute)) {
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    if (
+      startHour > endHour ||
+      (startHour === endHour && startMinute >= endMinute)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc"
+        message: "Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc",
       });
     }
 
@@ -70,34 +83,36 @@ export const createBooking = async (req, res) => {
     if (!schedule) {
       return res.status(400).json({
         success: false,
-        message: "Bác sĩ chưa có lịch làm việc"
+        message: "Bác sĩ chưa có lịch làm việc",
       });
     }
 
     const isHoliday = schedule.holidays.some(
-      holiday => holiday.toDateString() === bookingDate.toDateString()
+      (holiday) => holiday.toDateString() === bookingDate.toDateString()
     );
     if (isHoliday) {
       return res.status(400).json({
         success: false,
-        message: "Bác sĩ không làm việc vào ngày này"
+        message: "Bác sĩ không làm việc vào ngày này",
       });
     }
 
     const dayOfWeek = convertToVietnameseDay(date);
-    const daySchedule = schedule.schedule.find(s => s.dayOfWeek === dayOfWeek);
-    
+    const daySchedule = schedule.schedule.find(
+      (s) => s.dayOfWeek === dayOfWeek
+    );
+
     if (!daySchedule || !daySchedule.isActive) {
       return res.status(400).json({
         success: false,
-        message: "Bác sĩ không làm việc vào ngày này"
+        message: "Bác sĩ không làm việc vào ngày này",
       });
     }
 
     if (startTime < daySchedule.startTime || endTime > daySchedule.endTime) {
       return res.status(400).json({
         success: false,
-        message: "Thời gian đặt lịch nằm ngoài giờ làm việc của bác sĩ"
+        message: "Thời gian đặt lịch nằm ngoài giờ làm việc của bác sĩ",
       });
     }
 
@@ -108,33 +123,33 @@ export const createBooking = async (req, res) => {
       $or: [
         {
           startTime: startTime,
-          status: { $in: ["pending", "confirmed"] }
+          status: { $in: ["pending", "confirmed"] },
         },
         {
           endTime: endTime,
-          status: { $in: ["pending", "confirmed"] }
+          status: { $in: ["pending", "confirmed"] },
         },
         {
           $and: [
             { startTime: { $lt: endTime } },
             { endTime: { $gt: startTime } },
-            { status: { $in: ["pending", "confirmed"] } }
-          ]
-        }
-      ]
+            { status: { $in: ["pending", "confirmed"] } },
+          ],
+        },
+      ],
     });
 
     if (existingBooking) {
       return res.status(400).json({
         success: false,
-        message: "Thời gian này đã có lịch hẹn, vui lòng chọn thời gian khác"
+        message: "Thời gian này đã có lịch hẹn, vui lòng chọn thời gian khác",
       });
     }
 
     if (isNaN(price) || price <= 0) {
       return res.status(400).json({
         success: false,
-        message: "Giá tiền không hợp lệ"
+        message: "Giá tiền không hợp lệ",
       });
     }
 
@@ -153,23 +168,22 @@ export const createBooking = async (req, res) => {
           status: "pending",
           updatedBy: user,
           updatedByModel: "User",
-          date: new Date()
-        }
-      ]
+          date: new Date(),
+        },
+      ],
     });
 
     return res.status(201).json({
       success: true,
       message: "Đặt lịch khám thành công",
-      data: booking
+      data: booking,
     });
-
   } catch (error) {
     console.error("Create booking error:", error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi tạo lịch khám",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -359,23 +373,61 @@ export const getAllBookingByCustomer = async (req, res) => {
       filter.status = status;
     }
 
-    const [bookings, total] = await Promise.all([
+    // Get bookings with pagination
+    const [bookings, total, statusCounts] = await Promise.all([
       Booking.find(filter)
-        .populate("doctor", "name email phone")
+        .populate("doctor", "name email phone avatar specialty")
+        .populate("clinic", "name logo address")
         .sort({ createdAt: -1 })
         .skip((page - 1) * pageSize)
         .limit(pageSize),
       Booking.countDocuments(filter),
+      // Aggregate to count bookings by status
+      Booking.aggregate([
+        { $match: { user: userId } },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+          },
+        },
+      ]),
     ]);
+
+    // Calculate pagination stats
+    const currentPage = parseInt(page);
+    const currentPageSize = parseInt(pageSize);
+    const totalPages = Math.ceil(total / currentPageSize);
+    const hasMore = currentPage < totalPages;
+
+    // Convert status counts array to object
+    const statusCountsObject = {
+      pending: 0,
+      confirmed: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+
+    statusCounts.forEach((item) => {
+      statusCountsObject[item._id] = item.count;
+    });
 
     return res.status(200).json({
       success: true,
-      data: bookings,
-      pagination: {
-        page: parseInt(page),
-        pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(total / pageSize),
-        totalItems: total,
+      data: {
+        bookings,
+        pagination: {
+          page: currentPage,
+          pageSize: currentPageSize,
+          totalPages,
+          totalItems: total,
+        },
+        hasMore,
+        remainingItems: Math.max(0, total - currentPage * currentPageSize),
+        statistics: {
+          total,
+          ...statusCountsObject,
+        },
       },
     });
   } catch (error) {
