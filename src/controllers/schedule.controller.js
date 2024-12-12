@@ -8,6 +8,7 @@ import {
   generateAvailableTimeSlots,
   getDayNumber,
 } from "../helpers/schedule.js";
+moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createSchedule = async (req, res) => {
   try {
@@ -232,7 +233,7 @@ export const getScheduleBooking = async (req, res) => {
     if (!targetDate.isValid()) {
       return res.status(400).json({
         success: false,
-        message: "Định dạng ngày không hợp lệ. Sử dụng format: YYYY-MM-DD",
+        message: "Định dạng ngày không hợp lệ",
       });
     }
 
@@ -248,7 +249,18 @@ export const getScheduleBooking = async (req, res) => {
       });
     }
 
-    // Find the schedule for the target date
+    const startOfDay = targetDate.clone().startOf("day").toDate();
+    const endOfDay = targetDate.clone().endOf("day").toDate();
+
+    const bookings = await Booking.find({
+      doctor: doctorId,
+      date: {
+        $gte: startOfDay,
+        $lt: endOfDay,
+      },
+      status: { $in: ["pending", "confirmed"] },
+    });
+
     const targetDayOfWeek = getDayNumber(targetDate);
     const daySchedule = schedule.schedule.find(
       (day) => day.dayOfWeek === targetDayOfWeek
@@ -261,20 +273,11 @@ export const getScheduleBooking = async (req, res) => {
       });
     }
 
-    // Check if the date is a holiday
     const isHoliday = schedule.holidays.some(
       (holiday) =>
         moment(holiday).format("YYYY-MM-DD") === targetDate.format("YYYY-MM-DD")
     );
 
-    // Get bookings for the target date
-    const bookings = await Booking.find({
-      doctor: doctorId,
-      date: targetDate.toDate(),
-      status: { $in: ["pending", "confirmed"] },
-    });
-
-    // Process schedule for the target date
     const timeSlots =
       !daySchedule.isActive || isHoliday
         ? []

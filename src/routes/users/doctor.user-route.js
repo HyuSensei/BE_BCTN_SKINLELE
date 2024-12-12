@@ -26,7 +26,7 @@ const router = express.Router();
 router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
 router.get("/by-customer", getDoctorsByCustomer);
 router.get("/:slug", getDoctorDetail);
-router.put("/", authMiddlewareDoctor, updateDoctor);
+router.put("/:id", authMiddlewareDoctor, updateDoctor);
 
 router.get("/reviews/:doctor", getAllReviewByDoctor);
 router.post("/reviews", authMiddlewareUser, createReviewDoctor);

@@ -1,6 +1,7 @@
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
+import bcrypt from "bcryptjs";
 
 export const createDoctor = async (req, res) => {
   try {
@@ -71,6 +72,7 @@ export const updateDoctor = async (req, res) => {
       name,
       email,
       password,
+      newPassword,
       about,
       phone,
       fees,
@@ -80,6 +82,7 @@ export const updateDoctor = async (req, res) => {
       isActive,
     } = req.body;
 
+    // Find doctor and validate existence
     const doctor = await Doctor.findById(id);
     if (!doctor) {
       return res.status(404).json({
@@ -88,36 +91,73 @@ export const updateDoctor = async (req, res) => {
       });
     }
 
+    // Validate email uniqueness
     if (email && email !== doctor.email) {
       const existingDoctor = await Doctor.findOne({ email });
       if (existingDoctor) {
         return res.status(400).json({
           success: false,
-          message: "Email đã tồn tại, vui lòng thử lại !",
+          message: "Email đã tồn tại, vui lòng thử lại!",
         });
       }
     }
 
-    if (name) doctor.name = name;
-    if (email) doctor.email = email;
-    if (password) doctor.password = password;
-    if (about) doctor.about = about;
-    if (phone) doctor.phone = phone;
-    if (fees) doctor.fees = fees;
-    if (avatar) doctor.avatar = avatar;
-    if (specialty) doctor.specialty = specialty;
-    if (experience) doctor.experience = experience;
-    if (isActive !== undefined) doctor.isActive = isActive;
+    // Handle password update
+    if (newPassword) {
+      // Verify old password if provided
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập mật khẩu hiện tại",
+        });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, doctor.password);
+      if (!isPasswordValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu hiện tại không đúng",
+        });
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      doctor.password = hashedPassword;
+    }
+
+    // Update basic fields
+    const updateFields = {
+      name,
+      email,
+      about,
+      phone,
+      fees,
+      avatar,
+      specialty,
+      experience,
+      isActive,
+    };
+
+    // Only update fields that are provided
+    Object.keys(updateFields).forEach((key) => {
+      if (updateFields[key] !== undefined) {
+        doctor[key] = updateFields[key];
+      }
+    });
 
     const updatedDoctor = await doctor.save();
+
+    // Remove password from response
+    const doctorResponse = updatedDoctor.toObject();
+    delete doctorResponse.password;
 
     return res.status(200).json({
       success: true,
       message: "Cập nhật thông tin bác sĩ thành công",
-      data: updatedDoctor,
+      data: doctorResponse,
     });
   } catch (error) {
-    console.log(error);
+    console.error("Update doctor error:", error);
     return res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi cập nhật thông tin bác sĩ",
