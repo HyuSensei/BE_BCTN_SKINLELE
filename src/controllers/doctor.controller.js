@@ -80,6 +80,7 @@ export const updateDoctor = async (req, res) => {
       specialty,
       experience,
       isActive,
+      isAdmin = true
     } = req.body;
 
     // Find doctor and validate existence
@@ -104,7 +105,6 @@ export const updateDoctor = async (req, res) => {
 
     // Handle password update
     if (newPassword) {
-      // Verify old password if provided
       if (!password) {
         return res.status(400).json({
           success: false,
@@ -136,6 +136,7 @@ export const updateDoctor = async (req, res) => {
       specialty,
       experience,
       isActive,
+      password: isAdmin && password ? password : undefined
     };
 
     // Only update fields that are provided
