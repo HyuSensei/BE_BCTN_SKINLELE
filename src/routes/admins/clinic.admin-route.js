@@ -14,6 +14,7 @@ import {
 import { getAllBookingByAdmin } from "../../controllers/booking.controller.js";
 import { authMiddlewareAdmin } from "../../middleware/auth.middleware.js";
 import { accessRole, ADMIN_ROLE, CLINIC_ROLE } from "../../ultis/getRole.js";
+import { getClinicOverviewStats } from "../../controllers/statistical.controller.js";
 
 const router = express.Router();
 
@@ -51,6 +52,12 @@ router.get(
   "/bookings",
   authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
   getAllBookingByAdmin
+);
+
+router.get(
+  "/statistical/:clinicId",
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  getClinicOverviewStats
 );
 
 export default router;

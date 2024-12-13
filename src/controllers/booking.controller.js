@@ -6,190 +6,6 @@ import Schedule from "../models/schedule.model.js";
 import moment from "moment";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
-// export const createBooking = async (req, res) => {
-//   try {
-//     const { clinic, doctor, date, startTime, endTime, customer, price, note } =
-//       req.body;
-//     const user = req.user._id;
-
-//     if (
-//       !clinic ||
-//       !doctor ||
-//       !date ||
-//       !startTime ||
-//       !endTime ||
-//       !customer ||
-//       !price
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Vui lòng điền đầy đủ thông tin đặt lịch",
-//       });
-//     }
-
-//     const clinicExists = await Clinic.findOne({
-//       _id: clinic,
-//       isActive: true,
-//     });
-//     if (!clinicExists || !clinicExists.isActive) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Phòng khám không tồn tại hoặc đã ngừng hoạt động",
-//       });
-//     }
-
-//     const doctorExists = await Doctor.findOne({
-//       _id: doctor,
-//       clinic: clinic,
-//       isActive: true,
-//     });
-//     if (!doctorExists) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Bác sĩ không tồn tại hoặc không thuộc phòng khám này",
-//       });
-//     }
-
-//     const bookingDate = new Date(date);
-//     const today = new Date();
-//     today.setHours(0, 0, 0, 0);
-
-//     if (bookingDate < today) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Ngày đặt lịch không hợp lệ",
-//       });
-//     }
-
-//     const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
-//     if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Định dạng thời gian không hợp lệ",
-//       });
-//     }
-
-//     const [startHour, startMinute] = startTime.split(":").map(Number);
-//     const [endHour, endMinute] = endTime.split(":").map(Number);
-//     if (
-//       startHour > endHour ||
-//       (startHour === endHour && startMinute >= endMinute)
-//     ) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Thời gian bắt đầu phải nhỏ hơn thời gian kết thúc",
-//       });
-//     }
-
-//     const schedule = await Schedule.findOne({ doctor: doctor });
-//     if (!schedule) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Bác sĩ chưa có lịch làm việc",
-//       });
-//     }
-
-//     const isHoliday = schedule.holidays.some(
-//       (holiday) => holiday.toDateString() === bookingDate.toDateString()
-//     );
-//     if (isHoliday) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Bác sĩ không làm việc vào ngày này",
-//       });
-//     }
-
-//     const dayOfWeek = convertToVietnameseDay(date);
-//     const daySchedule = schedule.schedule.find(
-//       (s) => s.dayOfWeek === dayOfWeek
-//     );
-
-//     if (!daySchedule || !daySchedule.isActive) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Bác sĩ không làm việc vào ngày này",
-//       });
-//     }
-
-//     if (startTime < daySchedule.startTime || endTime > daySchedule.endTime) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Thời gian đặt lịch nằm ngoài giờ làm việc của bác sĩ",
-//       });
-//     }
-
-//     const existingBooking = await Booking.findOne({
-//       doctor,
-//       clinic,
-//       date: bookingDate,
-//       $or: [
-//         {
-//           startTime: startTime,
-//           status: { $in: ["pending", "confirmed"] },
-//         },
-//         {
-//           endTime: endTime,
-//           status: { $in: ["pending", "confirmed"] },
-//         },
-//         {
-//           $and: [
-//             { startTime: { $lt: endTime } },
-//             { endTime: { $gt: startTime } },
-//             { status: { $in: ["pending", "confirmed"] } },
-//           ],
-//         },
-//       ],
-//     });
-
-//     if (existingBooking) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Thời gian này đã có lịch hẹn, vui lòng chọn thời gian khác",
-//       });
-//     }
-
-//     if (isNaN(price) || price <= 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Giá tiền không hợp lệ",
-//       });
-//     }
-
-//     const booking = await Booking.create({
-//       user,
-//       doctor,
-//       clinic,
-//       date: bookingDate,
-//       startTime,
-//       endTime,
-//       customer,
-//       price,
-//       note: note || "",
-//       statusHistory: [
-//         {
-//           status: "pending",
-//           updatedBy: user,
-//           updatedByModel: "User",
-//           date: new Date(),
-//         },
-//       ],
-//     });
-
-//     return res.status(201).json({
-//       success: true,
-//       message: "Đặt lịch khám thành công",
-//       data: booking,
-//     });
-//   } catch (error) {
-//     console.error("Create booking error:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Lỗi khi tạo lịch khám",
-//       error: error.message,
-//     });
-//   }
-// };
-
 export const createBooking = async (req, res) => {
   try {
     const { clinic, doctor, date, startTime, endTime, customer, price, note } =
@@ -385,6 +201,49 @@ export const createBooking = async (req, res) => {
   }
 };
 
+// export const updateStatusBooking = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { status, cancelReason, model } = req.body;
+//     const updatedBy = req.user._id;
+
+//     const booking = await Booking.findById(id);
+//     if (!booking) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Không tìm thấy lịch khám",
+//       });
+//     }
+
+//     const prevStatus = booking.status;
+//     booking.status = status;
+
+//     if (status === "cancelled" && cancelReason) {
+//       booking.cancelReason = cancelReason;
+//     }
+
+//     booking.statusHistory.push({
+//       prevStatus,
+//       status,
+//       updatedBy,
+//       updatedByModel: model,
+//     });
+
+//     await booking.save();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Cập nhật trạng thái lịch khám thành công",
+//       data: booking,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       success: false,
+//       message: "Lỗi khi cập nhật trạng thái",
+//       error: error.message,
+//     });
+//   }
+// };
 
 export const updateStatusBooking = async (req, res) => {
   try {
@@ -401,17 +260,59 @@ export const updateStatusBooking = async (req, res) => {
     }
 
     const prevStatus = booking.status;
-    booking.status = status;
 
-    if (status === "cancelled" && cancelReason) {
-      booking.cancelReason = cancelReason;
+    const validStatuses = ["pending", "confirmed", "cancelled", "completed"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Trạng thái không hợp lệ",
+      });
     }
 
+    const validTransitions = {
+      pending: ["confirmed", "cancelled"],
+      confirmed: ["completed", "cancelled"],
+      cancelled: ["pending"],
+      completed: [],
+    };
+
+    if (
+      !validTransitions[prevStatus].includes(status) &&
+      prevStatus !== status
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: `Không thể chuyển trạng thái từ ${prevStatus} sang ${status}`,
+      });
+    }
+
+    if (status === "cancelled") {
+      if (!cancelReason || cancelReason.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp lý do hủy lịch khám",
+        });
+      }
+      booking.cancelReason = cancelReason.trim();
+    } else {
+      booking.cancelReason = "";
+    }
+
+    const validModels = ["User", "Doctor"];
+    if (!validModels.includes(model)) {
+      return res.status(400).json({
+        success: false,
+        message: "Loại người dùng cập nhật không hợp lệ",
+      });
+    }
+
+    booking.status = status;
     booking.statusHistory.push({
       prevStatus,
       status,
       updatedBy,
       updatedByModel: model,
+      date: new Date(),
     });
 
     await booking.save();
@@ -639,7 +540,14 @@ export const getAllBookingByCustomer = async (req, res) => {
 
 export const getAllBookingByAdmin = async (req, res) => {
   try {
-    const { page = 1, pageSize = 10, status, date, search } = req.query;
+    const {
+      page = 1,
+      pageSize = 10,
+      status,
+      fromDate,
+      toDate,
+      search,
+    } = req.query;
     const admin = req.admin._id;
 
     const clinic = await Clinic.findOne({ admin });
@@ -651,12 +559,24 @@ export const getAllBookingByAdmin = async (req, res) => {
       filter.status = status;
     }
 
-    if (date) {
-      filter.date = new Date(date);
+    if (fromDate || toDate) {
+      filter.date = {};
+
+      if (fromDate) {
+        const startDate = new Date(fromDate);
+        startDate.setHours(0, 0, 0, 0);
+        filter.date.$gte = startDate;
+      }
+
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        filter.date.$lte = endDate;
+      }
     }
 
     if (search) {
-      filter["$or"] = [
+      filter.$or = [
         { "customer.name": { $regex: search, $options: "i" } },
         { "customer.email": { $regex: search, $options: "i" } },
         { "customer.phone": { $regex: search, $options: "i" } },
@@ -666,20 +586,23 @@ export const getAllBookingByAdmin = async (req, res) => {
     const [bookings, total] = await Promise.all([
       Booking.find(filter)
         .populate("user", "name email")
-        .sort({ date: 1, startTime: 1 })
+        .populate("doctor", "name avatar email phone specialty")
+        .sort({ date: -1, startTime: -1 })
         .skip((page - 1) * pageSize)
-        .limit(pageSize),
+        .limit(parseInt(pageSize)),
       Booking.countDocuments(filter),
     ]);
 
     return res.status(200).json({
       success: true,
-      data: bookings,
-      pagination: {
-        page: parseInt(page),
-        pageSize: parseInt(pageSize),
-        totalPages: Math.ceil(total / pageSize),
-        totalItems: total,
+      data: {
+        bookings,
+        pagination: {
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalPage: Math.ceil(total / pageSize),
+          totalItems: total,
+        },
       },
     });
   } catch (error) {
