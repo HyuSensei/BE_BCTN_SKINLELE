@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import slugify from "slugify";
 import bcrypt from "bcryptjs";
+import moment from "moment";
 
 export const DocterSchema = new mongoose.Schema(
   {
@@ -51,6 +52,28 @@ export const DocterSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    duration: {
+      type: Number,
+      default: 15,
+    },
+    holidays: [
+      {
+        type: Date,
+        validate: {
+          validator: function (value) {
+            const dateToCheck = moment(value).format("YYYY-MM-DD");
+
+            const count = this.holidays.reduce((acc, date) => {
+              const formattedDate = moment(date).format("YYYY-MM-DD");
+              return formattedDate === dateToCheck ? acc + 1 : acc;
+            }, 0);
+
+            return count <= 1;
+          },
+          message: "Ngày nghỉ này đã tồn tại trong danh sách",
+        },
+      },
+    ],
     fees: {
       type: Number,
       required: true,

@@ -312,6 +312,13 @@ export const loginAdmin = async (req, res) => {
       });
     }
 
+    let clinic = null;
+    if (admin.role === "CLINIC") {
+      clinic = await Clinic.findOne({ admin: admin._id }).select(
+        "-__v -createdAt -updatedAt"
+      );
+    }
+
     const token = generateTokenAdmin(admin);
     return res.status(200).json({
       success: true,
@@ -322,6 +329,7 @@ export const loginAdmin = async (req, res) => {
         username: admin.username,
         avatar: admin.avatar,
         role: admin.role,
+        clinic,
       },
     });
   } catch (error) {

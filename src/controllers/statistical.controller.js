@@ -6,6 +6,7 @@ import Booking from "../models/booking.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
 import ReviewClinic from "../models/review-clinic.model.js";
 import Doctor from "../models/doctor.model.js";
+import { Types } from "mongoose";
 
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
@@ -264,9 +265,8 @@ export const getStatisticalDoctor = async (req, res) => {
       completed: 0,
     };
 
-    // Modify the dailyStats to include "Ngày"
     const dailyStats = Array.from({ length: daysInMonth }, (_, i) => ({
-      day: `Ngày ${i + 1}`, // Adding "Ngày" prefix
+      day: `Ngày ${i + 1}`,
       totalBookings: 0,
       revenue: 0,
       pending: 0,
@@ -275,17 +275,14 @@ export const getStatisticalDoctor = async (req, res) => {
       completed: 0,
     }));
 
-    // Calculate stats
     bookings.forEach((booking) => {
       const day = moment(booking.date).date();
       const dayIndex = day - 1;
 
-      // Update daily stats
       dailyStats[dayIndex].totalBookings++;
       dailyStats[dayIndex][booking.status]++;
       dailyStats[dayIndex].revenue += Number(booking.price);
 
-      // Update total stats
       totalStats.totalBookings++;
       totalStats[booking.status]++;
       totalStats.revenue += Number(booking.price);
@@ -310,59 +307,98 @@ export const getStatisticalDoctor = async (req, res) => {
   }
 };
 
-// API thống kê tổng quan
 export const getClinicOverviewStats = async (req, res) => {
   try {
-    const { clinicId } = req.params;
-    const today = moment().startOf("day");
-    const startOfWeek = moment().startOf("week");
-    const startOfMonth = moment().startOf("month");
+    const clinicId = new Types.ObjectId(`${req.params.clinicId}`);
+    const { year = moment().year(), month = moment().month() + 1 } = req.query;
 
-    // Thống kê đặt lịch
-    const [
-      totalBookings,
-      todayBookings,
-      weeklyBookings,
-      monthlyBookings,
-      bookingsByStatus,
-    ] = await Promise.all([
-      Booking.countDocuments({ clinic: clinicId }),
-      Booking.countDocuments({
-        clinic: clinicId,
-        date: {
-          $gte: today.toDate(),
-          $lt: moment(today).endOf("day").toDate(),
-        },
-      }),
-      Booking.countDocuments({
-        clinic: clinicId,
-        date: {
-          $gte: startOfWeek.toDate(),
-          $lt: moment(startOfWeek).endOf("week").toDate(),
-        },
-      }),
-      Booking.countDocuments({
-        clinic: clinicId,
-        date: {
-          $gte: startOfMonth.toDate(),
-          $lt: moment(startOfMonth).endOf("month").toDate(),
-        },
-      }),
+    const selectedDate = moment()
+      .year(year)
+      .month(month - 1);
+    const startOfMonth = moment(selectedDate).startOf("month");
+    const endOfMonth = moment(selectedDate).endOf("month");
+
+    const [monthlyStats, doctorStats, reviewStats] = await Promise.all([
       Booking.aggregate([
-        { $match: { clinic: clinicId } },
+        {
+          $match: {
+            clinic: clinicId,
+            date: {
+              $gte: startOfMonth.toDate(),
+              $lte: endOfMonth.toDate(),
+            },
+          },
+        },
         {
           $group: {
-            _id: "$status",
-            count: { $sum: 1 },
+            _id: null,
+            totalBookings: { $sum: 1 },
+            // Doanh thu thực tế (chỉ từ booking completed)
+            actualRevenue: {
+              $sum: {
+                $cond: [
+                  { $eq: ["$status", "completed"] },
+                  { $toDouble: "$price" },
+                  0,
+                ],
+              },
+            },
+            // Doanh số tiềm năng (tổng tất cả booking)
+            potentialRevenue: { $sum: { $toDouble: "$price" } },
+            pending: {
+              $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] },
+            },
+            confirmed: {
+              $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] },
+            },
+            cancelled: {
+              $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] },
+            },
+            completed: {
+              $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+            },
+            validBookings: {
+              $sum: {
+                $cond: [{ $ne: ["$status", "cancelled"] }, 1, 0],
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            totalBookings: 1,
+            actualRevenue: 1,
+            potentialRevenue: 1,
+            pending: 1,
+            confirmed: 1,
+            cancelled: 1,
+            completed: 1,
+            validBookings: 1,
+            completionRate: {
+              $cond: [
+                { $eq: ["$validBookings", 0] },
+                0,
+                {
+                  $multiply: [
+                    {
+                      $divide: ["$completed", "$validBookings"],
+                    },
+                    100,
+                  ],
+                },
+              ],
+            },
           },
         },
       ]),
-    ]);
 
-    // Thống kê bác sĩ và đánh giá
-    const [doctorStats, clinicReviews, doctorReviews] = await Promise.all([
       Doctor.aggregate([
-        { $match: { clinic: clinicId } },
+        {
+          $match: {
+            clinic: clinicId,
+            isActive: true,
+          },
+        },
         {
           $group: {
             _id: null,
@@ -371,30 +407,17 @@ export const getClinicOverviewStats = async (req, res) => {
           },
         },
       ]),
+
       ReviewClinic.aggregate([
-        { $match: { clinic: clinicId } },
         {
-          $group: {
-            _id: null,
-            averageRating: { $avg: "$rate" },
-            totalReviews: { $sum: 1 },
-            ratingDistribution: {
-              $push: "$rate",
+          $match: {
+            clinic: clinicId,
+            createdAt: {
+              $gte: startOfMonth.toDate(),
+              $lte: endOfMonth.toDate(),
             },
           },
         },
-      ]),
-      ReviewDoctor.aggregate([
-        {
-          $lookup: {
-            from: "doctors",
-            localField: "doctor",
-            foreignField: "_id",
-            as: "doctorInfo",
-          },
-        },
-        { $unwind: "$doctorInfo" },
-        { $match: { "doctorInfo.clinic": clinicId } },
         {
           $group: {
             _id: null,
@@ -405,55 +428,50 @@ export const getClinicOverviewStats = async (req, res) => {
       ]),
     ]);
 
-    // Xử lý phân bố rating
-    const ratingDistribution = clinicReviews[0]?.ratingDistribution.reduce(
-      (acc, rate) => {
-        acc[rate] = (acc[rate] || 0) + 1;
-        return acc;
-      },
-      { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
-    ) || { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-
-    // Xử lý trạng thái booking
-    const bookingStatus = {
+    const bookingStats = monthlyStats[0] || {
+      totalBookings: 0,
+      actualRevenue: 0,
+      potentialRevenue: 0,
       pending: 0,
       confirmed: 0,
       cancelled: 0,
       completed: 0,
+      completionRate: 0,
     };
-    bookingsByStatus.forEach((status) => {
-      bookingStatus[status._id] = status.count;
-    });
 
     return res.status(200).json({
       success: true,
       data: {
+        timeRange: {
+          month: parseInt(month),
+          year: parseInt(year),
+        },
         bookings: {
-          total: totalBookings,
-          today: todayBookings,
-          weekly: weeklyBookings,
-          monthly: monthlyBookings,
-          status: bookingStatus,
+          total: bookingStats.totalBookings,
+          revenue: {
+            actual: bookingStats.actualRevenue,
+            potential: bookingStats.potentialRevenue,
+          },
+          status: {
+            pending: bookingStats.pending,
+            confirmed: bookingStats.confirmed,
+            cancelled: bookingStats.cancelled,
+            completed: bookingStats.completed,
+          },
+          completionRate: Number(bookingStats.completionRate.toFixed(1)),
         },
         doctors: {
           total: doctorStats[0]?.totalDoctors || 0,
           specialties: doctorStats[0]?.specialties || [],
         },
         reviews: {
-          clinic: {
-            average: Number(clinicReviews[0]?.averageRating?.toFixed(1)) || 0,
-            total: clinicReviews[0]?.totalReviews || 0,
-            distribution: ratingDistribution,
-          },
-          doctors: {
-            average: Number(doctorReviews[0]?.averageRating?.toFixed(1)) || 0,
-            total: doctorReviews[0]?.totalReviews || 0,
-          },
+          average: Number(reviewStats[0]?.averageRating?.toFixed(1)) || 0,
+          total: reviewStats[0]?.totalReviews || 0,
         },
       },
     });
   } catch (error) {
-    console.error("Get clinic overview stats error:", error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy thống kê tổng quan",
@@ -462,61 +480,46 @@ export const getClinicOverviewStats = async (req, res) => {
   }
 };
 
-// API thống kê chi tiết theo thời gian
 export const getClinicDetailedStats = async (req, res) => {
   try {
-    const { clinicId } = req.params;
-    const {
-      startDate = moment().subtract(30, "days").format("YYYY-MM-DD"),
-      endDate = moment().format("YYYY-MM-DD"),
-      groupBy = "day", // day, week, month
-    } = req.query;
+    const clinicId = new Types.ObjectId(`${req.params.clinicId}`);
+    const { year = moment().year(), month = moment().month() + 1 } = req.query;
 
-    const start = moment(startDate).startOf("day");
-    const end = moment(endDate).endOf("day");
+    const startDate = moment()
+      .year(year)
+      .month(month - 1)
+      .startOf("month");
+    const endDate = moment(startDate).endOf("month");
 
-    if (!start.isValid() || !end.isValid()) {
-      return res.status(400).json({
-        success: false,
-        message: "Ngày không hợp lệ",
-      });
-    }
-
-    // Thống kê booking theo thời gian
-    const bookingStats = await Booking.aggregate([
+    const bookingChartData = await Booking.aggregate([
       {
         $match: {
           clinic: clinicId,
-          date: { $gte: start.toDate(), $lte: end.toDate() },
+          date: {
+            $gte: startDate.toDate(),
+            $lte: endDate.toDate(),
+          },
         },
       },
       {
         $group: {
           _id: {
-            $switch: {
-              branches: [
-                {
-                  case: { $eq: [groupBy, "week"] },
-                  then: { $week: "$date" },
-                },
-                {
-                  case: { $eq: [groupBy, "month"] },
-                  then: { $month: "$date" },
-                },
-              ],
-              default: {
-                $dateToString: { format: "%Y-%m-%d", date: "$date" },
-              },
-            },
+            $dateToString: { format: "%Y-%m-%d", date: "$date" },
           },
           totalBookings: { $sum: 1 },
+          pending: {
+            $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] },
+          },
+          confirmed: {
+            $sum: { $cond: [{ $eq: ["$status", "confirmed"] }, 1, 0] },
+          },
           completed: {
             $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
           },
           cancelled: {
             $sum: { $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0] },
           },
-          revenue: {
+          actualRevenue: {
             $sum: {
               $cond: [
                 { $eq: ["$status", "completed"] },
@@ -525,119 +528,178 @@ export const getClinicDetailedStats = async (req, res) => {
               ],
             },
           },
+          potentialRevenue: { $sum: { $toDouble: "$price" } },
         },
       },
       { $sort: { _id: 1 } },
     ]);
 
-    // Thống kê đánh giá theo thời gian
-    const reviewStats = await ReviewClinic.aggregate([
+    const doctorChartData = await Booking.aggregate([
       {
         $match: {
           clinic: clinicId,
-          createdAt: { $gte: start.toDate(), $lte: end.toDate() },
+          date: {
+            $gte: startDate.toDate(),
+            $lte: endDate.toDate(),
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "doctors",
+          localField: "doctor",
+          foreignField: "_id",
+          as: "doctorInfo",
+        },
+      },
+      { $unwind: "$doctorInfo" },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+            specialty: "$doctorInfo.specialty",
+          },
+          bookingCount: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.date",
+          specialties: {
+            $push: {
+              name: "$_id.specialty",
+              bookings: "$bookingCount",
+            },
+          },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const reviewChartData = await ReviewClinic.aggregate([
+      {
+        $match: {
+          clinic: clinicId,
+          createdAt: {
+            $gte: startDate.toDate(),
+            $lte: endDate.toDate(),
+          },
         },
       },
       {
         $group: {
           _id: {
-            $switch: {
-              branches: [
-                {
-                  case: { $eq: [groupBy, "week"] },
-                  then: { $week: "$createdAt" },
-                },
-                {
-                  case: { $eq: [groupBy, "month"] },
-                  then: { $month: "$createdAt" },
-                },
-              ],
-              default: {
-                $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-              },
-            },
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
           },
           averageRating: { $avg: "$rate" },
           totalReviews: { $sum: 1 },
+          ratingDistribution: {
+            $push: "$rate",
+          },
         },
       },
       { $sort: { _id: 1 } },
     ]);
 
-    // Tạo mảng các ngày trong khoảng thời gian
-    const timeline = [];
-    const current = moment(start);
-    while (current <= end) {
-      const timeKey =
-        groupBy === "week"
-          ? current.week()
-          : groupBy === "month"
-          ? current.month() + 1
-          : current.format("YYYY-MM-DD");
+    const daysInMonth = endDate.date();
+    const fullTimeline = Array.from({ length: daysInMonth }, (_, index) => {
+      const currentDate = moment(startDate).add(index, "days");
+      const dateString = currentDate.format("YYYY-MM-DD");
 
-      const bookingStat = bookingStats.find((stat) => stat._id === timeKey) || {
+      return {
+        date: dateString,
+        label: `Ngày ${currentDate.format("DD")}`,
+      };
+    });
+
+    const bookingChart = fullTimeline.map((day) => {
+      const bookingData = bookingChartData.find(
+        (data) => data._id === day.date
+      ) || {
         totalBookings: 0,
+        pending: 0,
+        confirmed: 0,
         completed: 0,
         cancelled: 0,
-        revenue: 0,
+        actualRevenue: 0,
+        potentialRevenue: 0,
       };
 
-      const reviewStat = reviewStats.find((stat) => stat._id === timeKey) || {
+      return {
+        date: day.date,
+        label: day.label,
+        total: bookingData.totalBookings,
+        pending: bookingData.pending,
+        confirmed: bookingData.confirmed,
+        completed: bookingData.completed,
+        cancelled: bookingData.cancelled,
+        revenue: {
+          actual: bookingData.actualRevenue,
+          potential: bookingData.potentialRevenue,
+        },
+      };
+    });
+
+    const doctorChart = fullTimeline.map((day) => {
+      const doctorData = doctorChartData.find(
+        (data) => data._id === day.date
+      ) || {
+        specialties: [],
+      };
+
+      return {
+        date: day.date,
+        label: day.label,
+        specialties: doctorData.specialties,
+      };
+    });
+
+    const reviewChart = fullTimeline.map((day) => {
+      const reviewData = reviewChartData.find(
+        (data) => data._id === day.date
+      ) || {
         averageRating: 0,
         totalReviews: 0,
+        ratingDistribution: [],
       };
 
-      timeline.push({
-        time:
-          groupBy === "week"
-            ? `Tuần ${timeKey}`
-            : groupBy === "month"
-            ? `Tháng ${timeKey}`
-            : timeKey,
-        ...bookingStat,
-        averageRating: Number(reviewStat.averageRating?.toFixed(1)) || 0,
-        totalReviews: reviewStat.totalReviews || 0,
-      });
+      const distribution =
+        reviewData.ratingDistribution?.reduce((acc, rate) => {
+          acc[rate] = (acc[rate] || 0) + 1;
+          return acc;
+        }, {}) || {};
 
-      current.add(1, groupBy);
-    }
+      return {
+        date: day.date,
+        label: day.label,
+        average: Number(reviewData.averageRating?.toFixed(1)) || 0,
+        total: reviewData.totalReviews,
+        distribution: {
+          1: distribution["1"] || 0,
+          2: distribution["2"] || 0,
+          3: distribution["3"] || 0,
+          4: distribution["4"] || 0,
+          5: distribution["5"] || 0,
+        },
+      };
+    });
 
     return res.status(200).json({
       success: true,
       data: {
-        timeline,
-        summary: {
-          totalBookings: timeline.reduce(
-            (sum, item) => sum + item.totalBookings,
-            0
-          ),
-          totalCompleted: timeline.reduce(
-            (sum, item) => sum + item.completed,
-            0
-          ),
-          totalCancelled: timeline.reduce(
-            (sum, item) => sum + item.cancelled,
-            0
-          ),
-          totalRevenue: timeline.reduce((sum, item) => sum + item.revenue, 0),
-          totalReviews: timeline.reduce(
-            (sum, item) => sum + item.totalReviews,
-            0
-          ),
-          averageRating:
-            Number(
-              (
-                timeline.reduce(
-                  (sum, item) => sum + item.averageRating * item.totalReviews,
-                  0
-                ) / timeline.reduce((sum, item) => sum + item.totalReviews, 0)
-              ).toFixed(1)
-            ) || 0,
+        timeRange: {
+          year: parseInt(year),
+          month: parseInt(month),
+        },
+        charts: {
+          booking: bookingChart,
+          doctor: doctorChart,
+          review: reviewChart,
         },
       },
     });
   } catch (error) {
-    console.error("Get clinic detailed stats error:", error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy thống kê chi tiết",

@@ -15,6 +15,7 @@ export const createClinic = async (req, res) => {
       description,
       images,
       workingHours,
+      holidays,
     } = req.body;
     const admin = req.admin._id;
 
@@ -36,6 +37,35 @@ export const createClinic = async (req, res) => {
       });
     }
 
+    if (workingHours) {
+      for (const schedule of workingHours) {
+        if (schedule.breakTime) {
+          const { start, end } = schedule.breakTime;
+          if (start && end) {
+            const breakStart = moment(start, "HH:mm");
+            const breakEnd = moment(end, "HH:mm");
+            const dayStart = moment(schedule.startTime, "HH:mm");
+            const dayEnd = moment(schedule.endTime, "HH:mm");
+
+            if (
+              breakStart >= breakEnd ||
+              breakStart < dayStart ||
+              breakEnd > dayEnd
+            ) {
+              return res.status(400).json({
+                success: false,
+                message: "Thời gian nghỉ không hợp lệ",
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const formattedHolidays = holidays
+      ? holidays.map((date) => new Date(date))
+      : [];
+
     const clinic = await Clinic.create({
       admin,
       specialties,
@@ -48,6 +78,7 @@ export const createClinic = async (req, res) => {
       description,
       images,
       workingHours,
+      holidays: formattedHolidays,
     });
 
     return res.status(201).json({
@@ -56,7 +87,7 @@ export const createClinic = async (req, res) => {
       data: clinic,
     });
   } catch (error) {
-    console.error("Create clinic error:", error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi tạo phòng khám",
@@ -79,6 +110,7 @@ export const updateClinic = async (req, res) => {
       images,
       banners,
       workingHours,
+      holidays,
       isActive,
     } = req.body;
 
@@ -114,15 +146,40 @@ export const updateClinic = async (req, res) => {
     }
 
     if (workingHours) {
-      for (const hours of workingHours) {
-        if (!hours.dayOfWeek || !hours.startTime || !hours.endTime) {
+      for (const schedule of workingHours) {
+        if (!schedule.dayOfWeek || !schedule.startTime || !schedule.endTime) {
           return res.status(400).json({
             success: false,
             message: "Thông tin giờ làm việc không hợp lệ",
           });
         }
+
+        if (schedule.breakTime) {
+          const { start, end } = schedule.breakTime;
+          if (start && end) {
+            const breakStart = moment(start, "HH:mm");
+            const breakEnd = moment(end, "HH:mm");
+            const dayStart = moment(schedule.startTime, "HH:mm");
+            const dayEnd = moment(schedule.endTime, "HH:mm");
+
+            if (
+              breakStart >= breakEnd ||
+              breakStart < dayStart ||
+              breakEnd > dayEnd
+            ) {
+              return res.status(400).json({
+                success: false,
+                message: "Thời gian nghỉ không hợp lệ",
+              });
+            }
+          }
+        }
       }
     }
+
+    const formattedHolidays = holidays
+      ? holidays.map((date) => new Date(date))
+      : clinic.holidays;
 
     const updateFields = {
       ...(name && { name }),
@@ -135,6 +192,7 @@ export const updateClinic = async (req, res) => {
       ...(banners && { banners }),
       ...(images && { images }),
       ...(workingHours && { workingHours }),
+      ...(holidays && { holidays: formattedHolidays }),
       ...(typeof isActive === "boolean" && { isActive }),
     };
 
@@ -149,7 +207,7 @@ export const updateClinic = async (req, res) => {
       data: updatedClinic,
     });
   } catch (error) {
-    console.error("Update clinic error:", error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi cập nhật thông tin phòng khám",
@@ -193,7 +251,7 @@ export const removeClinic = async (req, res) => {
       message: "Xóa phòng khám thành công",
     });
   } catch (error) {
-    console.error("Remove clinic error:", error);
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi xóa phòng khám",

@@ -1,3 +1,4 @@
+import moment from "moment";
 import mongoose from "mongoose";
 import slugify from "slugify";
 
@@ -93,6 +94,10 @@ const ClinicSchema = new mongoose.Schema(
           type: String,
           required: true,
         },
+        breakTime: {
+          start: String,
+          end: String,
+        },
         endTime: {
           type: String,
           required: true,
@@ -100,6 +105,24 @@ const ClinicSchema = new mongoose.Schema(
         isOpen: {
           type: Boolean,
           default: false,
+        },
+      },
+    ],
+    holidays: [
+      {
+        type: Date,
+        validate: {
+          validator: function (value) {
+            const dateToCheck = moment(value).format("YYYY-MM-DD");
+
+            const count = this.holidays.reduce((acc, date) => {
+              const formattedDate = moment(date).format("YYYY-MM-DD");
+              return formattedDate === dateToCheck ? acc + 1 : acc;
+            }, 0);
+
+            return count <= 1;
+          },
+          message: "Ngày nghỉ này đã tồn tại trong danh sách",
         },
       },
     ],

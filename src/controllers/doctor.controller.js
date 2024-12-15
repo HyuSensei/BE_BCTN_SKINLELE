@@ -1,3 +1,4 @@
+import moment from "moment";
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
@@ -16,14 +17,15 @@ export const createDoctor = async (req, res) => {
       avatar,
       specialty,
       experience,
+      duration,
+      holidays,
     } = req.body;
 
     const clinic = await Clinic.findOne({ admin });
-
     if (!clinic) {
       return res.status(404).json({
         success: false,
-        message: "Không tìm thấy thông tin phòng khám !",
+        message: "Không tìm thấy thông tin phòng khám!",
       });
     }
 
@@ -31,8 +33,22 @@ export const createDoctor = async (req, res) => {
     if (existingDoctor) {
       return res.status(400).json({
         success: false,
-        message: "Email đã tồn tại, vui lòng thử lại !",
+        message: "Email đã tồn tại, vui lòng thử lại!",
       });
+    }
+
+    if (holidays) {
+      const processedHolidays = holidays.map((date) => new Date(date));
+      const uniqueDates = new Set(
+        processedHolidays.map((date) => moment(date).format("YYYY-MM-DD"))
+      );
+
+      if (uniqueDates.size !== processedHolidays.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Không thể đặt trùng ngày nghỉ",
+        });
+      }
     }
 
     const newDoctor = new Doctor({
@@ -46,6 +62,8 @@ export const createDoctor = async (req, res) => {
       avatar,
       specialty,
       experience,
+      duration: duration || 15,
+      holidays: holidays?.map((date) => new Date(date)) || [],
     });
 
     const savedDoctor = await newDoctor.save();
@@ -56,7 +74,7 @@ export const createDoctor = async (req, res) => {
       data: savedDoctor,
     });
   } catch (error) {
-    console.log(error);
+    console.error("Create doctor error:", error);
     return res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi tạo thông tin bác sĩ",
@@ -72,18 +90,17 @@ export const updateDoctor = async (req, res) => {
       name,
       email,
       password,
-      newPassword,
       about,
       phone,
       fees,
       avatar,
       specialty,
       experience,
+      duration,
+      holidays,
       isActive,
-      isAdmin = true
     } = req.body;
 
-    // Find doctor and validate existence
     const doctor = await Doctor.findById(id);
     if (!doctor) {
       return res.status(404).json({
@@ -92,7 +109,6 @@ export const updateDoctor = async (req, res) => {
       });
     }
 
-    // Validate email uniqueness
     if (email && email !== doctor.email) {
       const existingDoctor = await Doctor.findOne({ email });
       if (existingDoctor) {
@@ -103,59 +119,40 @@ export const updateDoctor = async (req, res) => {
       }
     }
 
-    // Handle password update
-    if (newPassword) {
-      if (!password) {
+    let processedHolidays = doctor.holidays;
+    if (holidays) {
+      processedHolidays = holidays.map((date) => new Date(date));
+      const uniqueDates = new Set(
+        processedHolidays.map((date) => moment(date).format("YYYY-MM-DD"))
+      );
+
+      if (uniqueDates.size !== processedHolidays.length) {
         return res.status(400).json({
           success: false,
-          message: "Vui lòng nhập mật khẩu hiện tại",
+          message: "Không thể đặt trùng ngày nghỉ",
         });
       }
-
-      const isPasswordValid = await bcrypt.compare(password, doctor.password);
-      if (!isPasswordValid) {
-        return res.status(400).json({
-          success: false,
-          message: "Mật khẩu hiện tại không đúng",
-        });
-      }
-
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      doctor.password = hashedPassword;
     }
 
-    // Update basic fields
-    const updateFields = {
-      name,
-      email,
-      about,
-      phone,
-      fees,
-      avatar,
-      specialty,
-      experience,
-      isActive,
-      password: isAdmin && password ? password : undefined
-    };
-
-    // Only update fields that are provided
-    Object.keys(updateFields).forEach((key) => {
-      if (updateFields[key] !== undefined) {
-        doctor[key] = updateFields[key];
-      }
-    });
+    if (name) doctor.name = name;
+    if (email) doctor.email = email;
+    if (password) doctor.password = password;
+    if (about) doctor.about = about;
+    if (phone) doctor.phone = phone;
+    if (fees) doctor.fees = fees;
+    if (avatar) doctor.avatar = avatar;
+    if (specialty) doctor.specialty = specialty;
+    if (experience) doctor.experience = experience;
+    if (duration) doctor.duration = duration;
+    if (holidays) doctor.holidays = processedHolidays;
+    if (isActive !== undefined) doctor.isActive = isActive;
 
     const updatedDoctor = await doctor.save();
-
-    // Remove password from response
-    const doctorResponse = updatedDoctor.toObject();
-    delete doctorResponse.password;
 
     return res.status(200).json({
       success: true,
       message: "Cập nhật thông tin bác sĩ thành công",
-      data: doctorResponse,
+      data: updatedDoctor,
     });
   } catch (error) {
     console.error("Update doctor error:", error);
@@ -179,14 +176,30 @@ export const removeDoctor = async (req, res) => {
       });
     }
 
-    await Doctor.findByIdAndDelete(id);
+    const hasActiveSchedule = await Schedule.exists({
+      doctor: id,
+      "schedule.isActive": true,
+    });
+
+    if (hasActiveSchedule) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể xóa bác sĩ đang có lịch làm việc",
+      });
+    }
+
+    await Promise.all([
+      Doctor.findByIdAndDelete(id),
+      Schedule.deleteMany({ doctor: id }),
+      ReviewDoctor.deleteMany({ doctor: id }),
+    ]);
 
     return res.status(200).json({
       success: true,
       message: "Xóa thông tin bác sĩ thành công",
     });
   } catch (error) {
-    console.log(error);
+    console.error("Remove doctor error:", error);
     return res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi xóa thông tin bác sĩ",
@@ -199,9 +212,9 @@ export const getDoctorDetail = async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const doctor = await Doctor.findOne({ slug })
-      .select("-__v -createdAt -updatedAt -password")
-      .populate("clinic")
+    const doctor = await Doctor.findOne({ slug, isActive: true })
+      .select("-password -__v")
+      .populate("clinic", "-__v -createdAt -updatedAt")
       .lean();
 
     if (!doctor) {
@@ -212,83 +225,148 @@ export const getDoctorDetail = async (req, res) => {
       });
     }
 
-    const reviewStats = await ReviewDoctor.aggregate([
-      {
-        $match: { doctor: doctor._id },
-      },
-      {
-        $group: {
-          _id: null,
-          rating: { $avg: "$rate" },
-          totalReviews: { $sum: 1 },
+    const [schedule, reviewStats] = await Promise.all([
+      Schedule.findOne({ doctor: doctor._id })
+        .select("schedule holidays")
+        .lean(),
+      ReviewDoctor.aggregate([
+        { $match: { doctor: doctor._id } },
+        {
+          $group: {
+            _id: null,
+            averageRating: { $avg: "$rate" },
+            totalReviews: { $sum: 1 },
+            ratingDistribution: { $push: "$rate" },
+          },
         },
-      },
+      ]),
     ]);
 
-    const stats = reviewStats[0] || { rating: 0, totalReviews: 0 };
-
-    const doctorWithStats = {
-      ...doctor,
-      rating: Number(stats.rating?.toFixed(1)) || 0,
-      totalReviews: stats.totalReviews,
+    const stats = reviewStats[0] || {
+      averageRating: 0,
+      totalReviews: 0,
+      ratingDistribution: [],
     };
+
+    const ratingDistribution = stats.ratingDistribution.reduce(
+      (acc, rating) => {
+        acc[rating] = (acc[rating] || 0) + 1;
+        return acc;
+      },
+      { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+    );
 
     return res.status(200).json({
       success: true,
-      data: doctorWithStats,
+      data: {
+        ...doctor,
+        schedule: schedule?.schedule || [],
+        holidays: schedule?.holidays || [],
+        statistics: {
+          averageRating: Number(stats.averageRating?.toFixed(1)) || 0,
+          totalReviews: stats.totalReviews || 0,
+          ratingDistribution,
+        },
+      },
     });
   } catch (error) {
-    console.log(error);
+    console.error("Get doctor detail error:", error);
     return res.status(500).json({
       success: false,
-      data: {},
+      message: "Lỗi khi lấy thông tin bác sĩ",
       error: error.message,
+      data: {},
     });
   }
 };
 
-export const getAllDoctorByAdmin = async (req, res) => {
+export const getAllDoctorsByAdmin = async (req, res) => {
   try {
     const admin = req.admin._id;
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 12;
-    const name = req.query.name;
-    const skip = (page - 1) * pageSize;
+    const search = req.query.search || "";
+    const specialty = req.query.specialty || "";
+    const isActive = req.query.isActive;
 
     const clinic = await Clinic.findOne({ admin });
-    if (!clinic) throw new Error("Không tìm thấy thông tin phong khám");
+    if (!clinic) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin phòng khám",
+      });
+    }
 
     let filter = { clinic: clinic._id };
-    if (name) {
-      filter.name = { $regex: name, $options: "i" };
+
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (specialty) {
+      filter.specialty = { $regex: specialty, $options: "i" };
+    }
+
+    if (isActive !== undefined) {
+      filter.isActive = isActive === "true";
     }
 
     const [doctors, total] = await Promise.all([
       Doctor.find(filter)
         .select("-password")
         .sort({ createdAt: -1 })
-        .skip(skip)
+        .skip((page - 1) * pageSize)
         .limit(pageSize)
         .lean(),
       Doctor.countDocuments(filter),
     ]);
 
+    const doctorsWithStats = await Promise.all(
+      doctors.map(async (doctor) => {
+        const reviewStats = await ReviewDoctor.aggregate([
+          { $match: { doctor: doctor._id } },
+          {
+            $group: {
+              _id: null,
+              averageRating: { $avg: "$rate" },
+              totalReviews: { $sum: 1 },
+            },
+          },
+        ]);
+
+        const stats = reviewStats[0] || { averageRating: 0, totalReviews: 0 };
+
+        return {
+          ...doctor,
+          statistics: {
+            averageRating: Number(stats.averageRating?.toFixed(1)) || 0,
+            totalReviews: stats.totalReviews || 0,
+          },
+        };
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      data: doctors,
+      data: doctorsWithStats,
       pagination: {
         page,
-        totalPage: Math.ceil(total / pageSize),
         pageSize,
+        totalPage: Math.ceil(total / pageSize),
         totalItems: total,
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error("Get all doctors error:", error);
     return res.status(500).json({
       success: false,
-      data: [],
+      message: "Lỗi khi lấy danh sách bác sĩ",
       error: error.message,
+      data: [],
     });
   }
 };
