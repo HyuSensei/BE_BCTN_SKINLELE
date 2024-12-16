@@ -1,4 +1,5 @@
 import moment from "moment";
+moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const getDayNumber = (dayOfWeek) => {
   const day = moment(dayOfWeek).day();
@@ -16,57 +17,58 @@ export const getDayNumber = (dayOfWeek) => {
   return daysMap[day];
 };
 
-export const generateAvailableTimeSlots = (
+export const generateTimeSlots = ({
   startTime,
   endTime,
   duration,
   breakTime,
-  bookings
-) => {
+  existingBookings,
+  date,
+}) => {
   const slots = [];
   let currentTime = moment(startTime, "HH:mm");
   const endTimeObj = moment(endTime, "HH:mm");
 
-  // Check if startTime is after current time for today
-  const isToday = moment().isSame(moment(), "day");
-  if (isToday) {
+  // Adjust start time if it's today and current time is after start time
+  if (date.isSame(moment(), "day")) {
     const now = moment();
     if (currentTime.isBefore(now)) {
-      currentTime = moment(now).minutes(
-        Math.ceil(now.minutes() / duration) * duration
+      currentTime = moment(now).add(duration, "minutes");
+      currentTime.minutes(
+        Math.ceil(currentTime.minutes() / duration) * duration
       );
     }
   }
 
   while (currentTime.isBefore(endTimeObj)) {
-    const slotTime = currentTime.format("HH:mm");
-    const slotEndTime = currentTime.clone().add(duration, "minutes");
+    const slotStart = currentTime.format("HH:mm");
+    const slotEnd = moment(currentTime)
+      .add(duration, "minutes")
+      .format("HH:mm");
 
-    // Skip break time
+    // Skip break time slots
     if (
       breakTime &&
-      ((slotTime >= breakTime.start && slotTime < breakTime.end) ||
-        (slotEndTime.format("HH:mm") > breakTime.start &&
-          slotEndTime.format("HH:mm") <= breakTime.end))
+      ((slotStart >= breakTime.start && slotStart < breakTime.end) ||
+        (slotEnd > breakTime.start && slotEnd <= breakTime.end))
     ) {
       currentTime.add(duration, "minutes");
       continue;
     }
 
-    // Check if slot is available
-    const isBooked = bookings.some(
+    // Check slot availability
+    const isBooked = existingBookings.some(
       (booking) =>
-        booking.startTime === slotTime ||
-        (moment(booking.startTime, "HH:mm").isBefore(slotEndTime) &&
-          moment(booking.endTime, "HH:mm").isAfter(currentTime))
+        (booking.startTime <= slotStart && booking.endTime > slotStart) ||
+        (booking.startTime < slotEnd && booking.endTime >= slotEnd)
     );
 
-    if (!isBooked) {
-      slots.push({
-        startTime: slotTime,
-        endTime: slotEndTime.format("HH:mm"),
-      });
-    }
+    slots.push({
+      startTime: slotStart,
+      endTime: slotEnd,
+      isAvailable: !isBooked,
+      duration,
+    });
 
     currentTime.add(duration, "minutes");
   }

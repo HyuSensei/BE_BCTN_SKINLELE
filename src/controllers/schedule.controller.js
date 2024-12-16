@@ -4,10 +4,7 @@ import Doctor from "../models/doctor.model.js";
 import Booking from "../models/booking.model.js";
 import moment from "moment";
 import { convertToVietnameseDay } from "../helpers/convert.js";
-import {
-  generateAvailableTimeSlots,
-  getDayNumber,
-} from "../helpers/schedule.js";
+import { generateTimeSlots, getDayNumber } from "../helpers/schedule.js";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createSchedule = async (req, res) => {
@@ -281,7 +278,7 @@ export const getScheduleBooking = async (req, res) => {
     const timeSlots =
       !daySchedule.isActive || isHoliday
         ? []
-        : generateAvailableTimeSlots(
+        : generateTimeSlots(
             daySchedule.startTime,
             daySchedule.endTime,
             daySchedule.duration,

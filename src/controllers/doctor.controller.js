@@ -1,7 +1,11 @@
-import moment from "moment";
+import { generateTimeSlots, getDayNumber } from "../helpers/schedule.js";
+import Booking from "../models/booking.model.js";
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
+import Schedule from "../models/schedule.model.js";
+import moment from "moment";
+moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createDoctor = async (req, res) => {
   try {
@@ -477,6 +481,126 @@ export const getDoctorsByCustomer = async (req, res) => {
       success: false,
       data: [],
       error: error.message,
+    });
+  }
+};
+
+export const getScheduleByDoctor = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const today = moment().startOf("day");
+    const targetDate = req.query.date
+      ? moment(req.query.date, "YYYY-MM-DD")
+      : today;
+
+    if (!targetDate.isValid()) {
+      return res.status(400).json({
+        success: false,
+        message: "Định dạng ngày không hợp lệ. Sử dụng format: YYYY-MM-DD",
+      });
+    }
+
+    const doctor = await Doctor.findById(doctorId);
+    const clinic = await Clinic.findOne({ _id: doctor.clinic });
+
+    if (!doctor || !clinic) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin bác sĩ hoặc phòng khám",
+      });
+    }
+
+    const dayOfWeek = getDayNumber(targetDate);
+
+    const workingHours = clinic.workingHours.find(
+      (hours) => hours.dayOfWeek === dayOfWeek
+    );
+
+    if (!workingHours || !workingHours.isOpen) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          date: targetDate.format("YYYY-MM-DD"),
+          dayOfWeek,
+          isOpen: false,
+          timeSlots: [],
+          message: `Phòng khám đóng cửa vào ngày ${targetDate} !`,
+        },
+      });
+    }
+
+    const isClinicHoliday = clinic.holidays.some((holiday) =>
+      moment(holiday).isSame(targetDate, "day")
+    );
+
+    if (isClinicHoliday) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          date: targetDate.format("YYYY-MM-DD"),
+          dayOfWeek,
+          isOpen: false,
+          timeSlots: [],
+          message: "Ngày nghỉ của phòng khám, xin lỗi quý khách hàng !",
+        },
+      });
+    }
+
+    const isDoctorHoliday = doctor.holidays.some((holiday) =>
+      moment(holiday).isSame(targetDate, "day")
+    );
+
+    if (isDoctorHoliday) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          date: targetDate.format("YYYY-MM-DD"),
+          dayOfWeek,
+          isOpen: false,
+          timeSlots: [],
+          message: "Ngày nghỉ của bác sĩ, xin lỗi quý khách hàng !",
+        },
+      });
+    }
+
+    const existingBookings = await Booking.find({
+      doctor: doctorId,
+      date: {
+        $gte: targetDate.startOf("day").toDate(),
+        $lte: targetDate.endOf("day").toDate(),
+      },
+      status: { $in: ["pending", "confirmed"] },
+    });
+
+    const timeSlots = generateTimeSlots({
+      startTime: workingHours.startTime,
+      endTime: workingHours.endTime,
+      duration: doctor.duration || 30,
+      breakTime: workingHours.breakTime,
+      existingBookings,
+      date: targetDate,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        date: targetDate.format("YYYY-MM-DD"),
+        dayOfWeek,
+        isOpen: true,
+        workingHours: {
+          start: workingHours.startTime,
+          end: workingHours.endTime,
+          breakTime: workingHours.breakTime,
+        },
+        timeSlots,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      data: [],
+      message: error.message,
     });
   }
 };

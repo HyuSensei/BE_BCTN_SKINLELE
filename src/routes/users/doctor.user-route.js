@@ -2,6 +2,7 @@ import express from "express";
 import {
   getDoctorDetail,
   getDoctorsByCustomer,
+  getScheduleByDoctor,
   updateDoctor,
 } from "../../controllers/doctor.controller.js";
 import {
@@ -27,6 +28,7 @@ router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
 router.get("/by-customer", getDoctorsByCustomer);
 router.get("/:slug", getDoctorDetail);
 router.put("/:id", authMiddlewareDoctor, updateDoctor);
+router.get("/schedule-booking/:doctorId", getScheduleByDoctor);
 
 router.get("/reviews/:doctor", getAllReviewByDoctor);
 router.post("/reviews", authMiddlewareUser, createReviewDoctor);

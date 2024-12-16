@@ -445,7 +445,7 @@ export const getAccountDoctor = async (req, res) => {
       .populate({
         path: "clinic",
         select:
-          "name logo address email phone description specialties workingHours",
+          "name logo address email phone description specialties workingHours holidays",
       });
 
     if (!doctor) {
@@ -478,10 +478,10 @@ export const getAccountDoctor = async (req, res) => {
         experience: doctor.experience,
         fees: doctor.fees,
         about: doctor.about,
-        duration:doctor.duration,
+        duration: doctor.duration,
         clinic: doctor.clinic,
         schedule: resSchedule?.schedule || [],
-        holidays: resSchedule?.holidays || [],
+        holidays: doctor?.holidays || [],
       },
     });
   } catch (error) {
