@@ -2,7 +2,6 @@ import moment from "moment";
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
-import bcrypt from "bcryptjs";
 
 export const createDoctor = async (req, res) => {
   try {

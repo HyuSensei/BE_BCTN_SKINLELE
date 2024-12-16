@@ -515,8 +515,9 @@ export const updateClinicByOwner = async (req, res) => {
       images,
       banners,
       workingHours,
+      holidays,
     } = req.body;
-
+    
     const clinic = await Clinic.findOne({ admin: adminId });
     if (!clinic) {
       return res.status(404).json({
@@ -535,22 +536,22 @@ export const updateClinicByOwner = async (req, res) => {
       }
     }
 
+    const updateFields = {};
+    if (name) updateFields.name = name;
+    if (email) updateFields.email = email;
+    if (phone) updateFields.phone = phone;
+    if (address) updateFields.address = address;
+    if (description) updateFields.description = description;
+    if (specialties) updateFields.specialties = specialties;
+    if (logo) updateFields.logo = logo;
+    if (images) updateFields.images = images;
+    if (banners) updateFields.banners = banners;
+    if (workingHours) updateFields.workingHours = workingHours;
+    if (holidays) updateFields.holidays = holidays;
+ 
     const updatedClinic = await Clinic.findOneAndUpdate(
       { admin: adminId },
-      {
-        $set: {
-          name,
-          email,
-          phone,
-          address,
-          description,
-          specialties,
-          logo,
-          images,
-          banners,
-          workingHours,
-        },
-      },
+      { $set: updateFields },
       { new: true }
     );
 

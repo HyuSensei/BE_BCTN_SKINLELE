@@ -478,6 +478,7 @@ export const getAccountDoctor = async (req, res) => {
         experience: doctor.experience,
         fees: doctor.fees,
         about: doctor.about,
+        duration:doctor.duration,
         clinic: doctor.clinic,
         schedule: resSchedule?.schedule || [],
         holidays: resSchedule?.holidays || [],
