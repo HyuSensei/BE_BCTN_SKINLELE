@@ -179,3 +179,83 @@ export const removeReviewDoctor = async (req, res) => {
     });
   }
 };
+
+export const getAllReviewByCustomer = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const { rate } = req.query;
+
+    let filter = { doctor: doctorId };
+    if (rate) {
+      filter.rate = parseInt(rate);
+    }
+
+    const total = await ReviewDoctor.countDocuments(filter);
+
+    const hasMore = page * pageSize < total;
+
+    const reviews = await ReviewDoctor.find(filter)
+      .populate("user", "name avatar")
+      .populate("booking", "date")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean();
+
+    const stats = await ReviewDoctor.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: "$rate" },
+          totalReviews: { $sum: 1 },
+          ratingDistribution: { $push: "$rate" },
+        },
+      },
+    ]);
+
+    const ratingDistribution = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+    };
+
+    if (stats[0]) {
+      stats[0].ratingDistribution.forEach((rating) => {
+        ratingDistribution[rating] = (ratingDistribution[rating] || 0) + 1;
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        reviews,
+        hasMore,
+        pagination: {
+          page,
+          totalPage: Math.ceil(total / pageSize),
+          totalItems: total,
+          pageSize,
+        },
+        stats: {
+          averageRating: stats[0]?.averageRating
+            ? Number(stats[0].averageRating.toFixed(1))
+            : 0,
+          totalReviews: stats[0]?.totalReviews || 0,
+          ratingDistribution,
+        },
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      data: [],
+    });
+  }
+};

@@ -151,7 +151,7 @@ export const getAllReviewClinic = async (req, res) => {
           totalItems: total,
         },
         hasMore,
-        statistics: {
+        stats: {
           averageRating: stats[0]?.averageRating || 0,
           totalReviews: total,
           ratingDistribution,

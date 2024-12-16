@@ -7,6 +7,7 @@ import {
 } from "../../controllers/doctor.controller.js";
 import {
   createReviewDoctor,
+  getAllReviewByCustomer,
   getAllReviewByDoctor,
   removeReviewDoctor,
 } from "../../controllers/review-doctor.controller.js";
@@ -30,7 +31,8 @@ router.get("/:slug", getDoctorDetail);
 router.put("/:id", authMiddlewareDoctor, updateDoctor);
 router.get("/schedule-booking/:doctorId", getScheduleByDoctor);
 
-router.get("/reviews/:doctor", getAllReviewByDoctor);
+router.get("/reviews/:doctor", authMiddlewareDoctor, getAllReviewByDoctor);
+router.get("/reviews/by-customer/:doctor", getAllReviewByCustomer);
 router.post("/reviews", authMiddlewareUser, createReviewDoctor);
 router.delete("/reviews/:id", authMiddlewareDoctor, removeReviewDoctor);
 
