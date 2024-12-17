@@ -2,6 +2,7 @@ import express from "express";
 import {
   getDoctorDetail,
   getDoctorsByCustomer,
+  getDoctorFilterOptions,
   getScheduleByDoctor,
   updateDoctor,
 } from "../../controllers/doctor.controller.js";
@@ -27,14 +28,15 @@ const router = express.Router();
 
 router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
 router.get("/by-customer", getDoctorsByCustomer);
+router.get("/filter-options", getDoctorFilterOptions)
 router.get("/:slug", getDoctorDetail);
 router.put("/:id", authMiddlewareDoctor, updateDoctor);
 router.get("/schedule-booking/:doctorId", getScheduleByDoctor);
 
-router.get("/reviews/:doctor", authMiddlewareDoctor, getAllReviewByDoctor);
 router.get("/reviews/by-customer/:doctor", getAllReviewByCustomer);
 router.post("/reviews", authMiddlewareUser, createReviewDoctor);
 router.delete("/reviews/:id", authMiddlewareDoctor, removeReviewDoctor);
+router.get("/reviews/:doctor", authMiddlewareDoctor, getAllReviewByDoctor);
 
 router.post("/schedule", authMiddlewareDoctor, createSchedule);
 router.put("/schedule/:id", authMiddlewareDoctor, updateSchedule);

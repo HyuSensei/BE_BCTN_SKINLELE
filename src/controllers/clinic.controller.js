@@ -1,6 +1,7 @@
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import ReviewClinic from "../models/review-clinic.model.js";
+import { formatPrice } from "../ultis/formatPrice.js";
 
 export const createClinic = async (req, res) => {
   try {
@@ -635,6 +636,179 @@ export const getClinicsByCustomer = async (req, res) => {
       success: false,
       data: [],
       error: error.message,
+    });
+  }
+};
+
+export const getClinicFilterOptions = async (req, res) => {
+  try {
+    const doctorPrices = await Doctor.aggregate([
+      {
+        $match: { isActive: true }
+      },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: "$fees" },
+          maxPrice: { $max: "$fees" }
+        }
+      }
+    ]);
+
+    const prices = doctorPrices[0] || { minPrice: 0, maxPrice: 0 };
+    let priceRanges = [];
+
+    if (prices.maxPrice > 0) {
+      const min = Math.floor(prices.minPrice / 1000) * 1000;
+      const max = Math.ceil(prices.maxPrice / 1000) * 1000;
+      const range = max - min;
+      const numRanges = range <= 500000 ? 2 : range <= 1000000 ? 3 : 4;
+      const step = Math.ceil(range / numRanges / 10000) * 10000;
+
+      for (let i = min; i < max; i += step) {
+        const rangeMin = i;
+        const rangeMax = Math.min(i + step, max);
+        priceRanges.push({
+          min: rangeMin,
+          max: rangeMax,
+          label: `${formatPrice(rangeMin, true)} - ${formatPrice(rangeMax, true)}`,
+          value: `${rangeMin}-${rangeMax}`
+        });
+      }
+    }
+
+    const doctorCountRanges = await Clinic.aggregate([
+      {
+        $lookup: {
+          from: 'doctors',
+          localField: '_id',
+          foreignField: 'clinic',
+          as: 'doctors'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          counts: { $push: { $size: '$doctors' } }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          min: { $min: '$counts' },
+          max: { $max: '$counts' }
+        }
+      }
+    ]);
+
+    const doctorCounts = doctorCountRanges[0] || { min: 0, max: 0 };
+    const doctorCountOptions = [
+      { label: '1-5 bác sĩ', value: '1-5', min: 1, max: 5 },
+      { label: '6-10 bác sĩ', value: '6-10', min: 6, max: 10 },
+      { label: '11-20 bác sĩ', value: '11-20', min: 11, max: 20 },
+      { label: 'Trên 20 bác sĩ', value: '20+', min: 20, max: null }
+    ];
+
+    const ratingStats = await ReviewClinic.aggregate([
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$rate' },
+          ratings: { $push: '$rate' }
+        }
+      }
+    ]);
+
+    const ratingOptions = [
+      { label: 'Trên 4.5 ⭐', value: '4.5', min: 4.5 },
+      { label: 'Trên 4.0 ⭐', value: '4.0', min: 4.0 },
+      { label: 'Trên 3.5 ⭐', value: '3.5', min: 3.5 },
+      { label: 'Trên 3.0 ⭐', value: '3.0', min: 3.0 }
+    ];
+
+    const workingHourOptions = [
+      { label: 'Sáng (06:00 - 12:00)', value: 'morning', start: '06:00', end: '12:00' },
+      { label: 'Chiều (12:00 - 18:00)', value: 'afternoon', start: '12:00', end: '18:00' },
+      { label: 'Tối (18:00 - 22:00)', value: 'evening', start: '18:00', end: '22:00' },
+      { label: 'Cả ngày', value: 'allday' }
+    ];
+
+    const statusOptions = [
+      { label: 'Đang hoạt động', value: true },
+      { label: 'Tạm ngừng', value: false }
+    ];
+
+    const clinicStats = await Clinic.aggregate([
+      {
+        $lookup: {
+          from: 'doctors',
+          localField: '_id',
+          foreignField: 'clinic',
+          as: 'doctors'
+        }
+      },
+      {
+        $lookup: {
+          from: 'reviewclinics',
+          localField: '_id',
+          foreignField: 'clinic',
+          as: 'reviews'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          activeCount: {
+            $sum: { $cond: ['$isActive', 1, 0] }
+          },
+          inactiveCount: {
+            $sum: { $cond: ['$isActive', 0, 1] }
+          },
+          avgRating: { $avg: { $avg: '$reviews.rate' } }
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        prices: {
+          ranges: priceRanges,
+          stats: {
+            min: prices.minPrice,
+            max: prices.maxPrice,
+            formatted: {
+              min: formatPrice(prices.minPrice),
+              max: formatPrice(prices.maxPrice)
+            }
+          }
+        },
+        doctorCounts: {
+          options: doctorCountOptions,
+          stats: doctorCounts
+        },
+        ratings: {
+          options: ratingOptions,
+          stats: ratingStats[0] || { averageRating: 0 }
+        },
+        workingHours: workingHourOptions,
+        status: {
+          options: statusOptions,
+          stats: clinicStats[0] || {
+            total: 0,
+            activeCount: 0,
+            inactiveCount: 0
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy thông tin filter",
+      error: error.message
     });
   }
 };

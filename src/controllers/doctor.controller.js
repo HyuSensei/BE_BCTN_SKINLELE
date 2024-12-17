@@ -5,6 +5,7 @@ import Doctor from "../models/doctor.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
 import Schedule from "../models/schedule.model.js";
 import moment from "moment";
+import { formatPrice } from "../ultis/formatPrice.js";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createDoctor = async (req, res) => {
@@ -601,6 +602,161 @@ export const getScheduleByDoctor = async (req, res) => {
       success: false,
       data: [],
       message: error.message,
+    });
+  }
+};
+
+export const getDoctorFilterOptions = async (req, res) => {
+  try {
+
+    const specialties = await Doctor.distinct('specialty');
+
+    // 2. Get experience ranges
+    const experienceRanges = [
+      { label: "Dưới 2 năm", value: "0-2", min: 0, max: 2 },
+      { label: "2-5 năm", value: "2-5", min: 2, max: 5 },
+      { label: "5-10 năm", value: "5-10", min: 5, max: 10 },
+      { label: "Trên 10 năm", value: "10+", min: 10, max: null }
+    ];
+
+    const priceStats = await Doctor.aggregate([
+      {
+        $match: { isActive: true }
+      },
+      {
+        $group: {
+          _id: null,
+          minFee: { $min: "$fees" },
+          maxFee: { $max: "$fees" }
+        }
+      }
+    ]);
+
+    let priceRanges = [];
+    if (priceStats.length > 0) {
+      const { minFee, maxFee } = priceStats[0];
+      const min = Math.floor(minFee / 1000) * 1000;
+      const max = Math.ceil(maxFee / 1000) * 1000;
+      const range = max - min;
+      const numRanges = range <= 500000 ? 2 : range <= 1000000 ? 3 : 4;
+      const step = Math.ceil(range / numRanges / 10000) * 10000;
+
+      for (let i = min; i < max; i += step) {
+        const rangeMin = i;
+        const rangeMax = Math.min(i + step, max);
+        priceRanges.push({
+          min: rangeMin,
+          max: rangeMax,
+          label: `${formatPrice(rangeMin, true)} - ${formatPrice(rangeMax, true)}`,
+          value: `${rangeMin}-${rangeMax}`
+        });
+      }
+    }
+
+    const ratingStats = await ReviewDoctor.aggregate([
+      {
+        $group: {
+          _id: null,
+          avgRating: { $avg: "$rate" },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const ratingOptions = [
+      { label: "Trên 4.5 ⭐", value: 4.5 },
+      { label: "Trên 4.0 ⭐", value: 4.0 },
+      { label: "Trên 3.5 ⭐", value: 3.5 }
+    ];
+
+    // 5. Get active clinics
+    const clinics = await Clinic.find({ isActive: true })
+      .select('name address')
+      .limit(10);
+
+    // 6. Status options
+    const statusOptions = [
+      { label: "Đang làm việc", value: true },
+      { label: "Tạm nghỉ", value: false }
+    ];
+
+    // Get overall statistics
+    const stats = await Doctor.aggregate([
+      {
+        $lookup: {
+          from: 'reviewdoctors',
+          localField: '_id',
+          foreignField: 'doctor',
+          as: 'reviews'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalDoctors: { $sum: 1 },
+          activeDoctors: { $sum: { $cond: ["$isActive", 1, 0] }},
+          avgExperience: { $avg: "$experience" },
+          avgRating: { $avg: { $avg: "$reviews.rate" }}
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        specialties: {
+          options: specialties.map(specialty => ({
+            label: specialty,
+            value: specialty
+          }))
+        },
+        experience: {
+          options: experienceRanges,
+          stats: {
+            avg: Math.round(stats[0]?.avgExperience || 0)
+          }
+        },
+        prices: {
+          ranges: priceRanges,
+          stats: {
+            min: priceStats[0]?.minFee || 0,
+            max: priceStats[0]?.maxFee || 0,
+            formatted: {
+              min: formatPrice(priceStats[0]?.minFee || 0),
+              max: formatPrice(priceStats[0]?.maxFee || 0)
+            }
+          }
+        },
+        ratings: {
+          options: ratingOptions,
+          stats: {
+            average: Number((ratingStats[0]?.avgRating || 0).toFixed(1)),
+            total: ratingStats[0]?.totalReviews || 0
+          }
+        },
+        clinics: {
+          options: clinics.map(clinic => ({
+            label: clinic.name,
+            value: clinic._id,
+            address: clinic.address
+          }))
+        },
+        status: {
+          options: statusOptions,
+          stats: {
+            total: stats[0]?.totalDoctors || 0,
+            active: stats[0]?.activeDoctors || 0
+          }
+        }
+      }
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy thông tin filter",
+      error: error.message
     });
   }
 };

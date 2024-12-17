@@ -2,6 +2,7 @@ import express from "express";
 import {
   getClinicsByCustomer,
   getDetailClinic,
+  getClinicFilterOptions
 } from "../../controllers/clinic.controller.js";
 import {
   createReviewClinic,
@@ -13,7 +14,8 @@ const router = express.Router();
 
 router.get("/by-customer", getClinicsByCustomer);
 router.get("/reviews", getAllReviewClinic);
-router.get("/:slug", getDetailClinic);
 router.post("/reviews", authMiddlewareUser, createReviewClinic);
+router.get("/filter-options", getClinicFilterOptions);
+router.get("/:slug", getDetailClinic);
 
 export default router;
