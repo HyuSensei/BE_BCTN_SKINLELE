@@ -377,14 +377,24 @@ export const getAllDoctorsByAdmin = async (req, res) => {
 
 export const getDoctorsByCustomer = async (req, res) => {
   try {
-    const { search = "", specialty = "", clinic = "" } = req.query;
+    const {
+      page,
+      pageSize,
+      search = "",
+      specialty = "",
+      experience = "",
+      priceRange = "",
+      rating = "",
+      clinic = "",
+    } = req.query;
+
     let filter = { isActive: true };
 
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
         { specialty: { $regex: search, $options: "i" } },
+        { about: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -392,87 +402,132 @@ export const getDoctorsByCustomer = async (req, res) => {
       filter.specialty = specialty;
     }
 
+    if (experience) {
+      const [min, max] = experience.split("-").map(Number);
+      if (max) {
+        filter.experience = { $gte: min, $lte: max };
+      } else {
+        filter.experience = { $gte: min };
+      }
+    }
+
+    if (priceRange) {
+      const [min, max] = priceRange.split("-").map(Number);
+      filter.fees = { $gte: min, $lte: max };
+    }
+
     if (clinic) {
       filter.clinic = clinic;
     }
 
-    if (req.query.page && req.query.pageSize) {
-      const page = parseInt(req.query.page);
-      const pageSize = parseInt(req.query.pageSize);
+    const aggregationPipeline = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: "reviewdoctors",
+          localField: "_id",
+          foreignField: "doctor",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          averageRating: {
+            $cond: [
+              { $gt: [{ $size: "$reviews" }, 0] },
+              { $avg: "$reviews.rate" },
+              0,
+            ],
+          },
+          totalReviews: { $size: "$reviews" },
+        },
+      },
+    ];
 
-      const [doctors, total] = await Promise.all([
-        Doctor.find(filter)
-          .populate("clinic", "name")
-          .sort({ experience: -1 })
-          .skip((page - 1) * pageSize)
-          .limit(pageSize),
-        Doctor.countDocuments(filter),
-      ]);
+    if (rating) {
+      aggregationPipeline.push({
+        $match: {
+          averageRating: { $gte: parseFloat(rating) },
+        },
+      });
+    }
 
-      const doctorsWithRatings = await Promise.all(
-        doctors.map(async (doctor) => {
-          const reviews = await ReviewDoctor.aggregate([
-            { $match: { doctor: doctor._id } },
-            {
-              $group: {
-                _id: null,
-                averageRating: { $avg: "$rate" },
-                totalReviews: { $sum: 1 },
-              },
-            },
-          ]);
+    aggregationPipeline.push({
+      $lookup: {
+        from: "clinics",
+        localField: "clinic",
+        foreignField: "_id",
+        as: "clinicDetails",
+      },
+    });
 
-          const rating = reviews[0] || { averageRating: 0, totalReviews: 0 };
-          return {
-            ...doctor.toObject(),
-            rating: Number(rating.averageRating?.toFixed(1)) || 0,
-            reviewCount: rating.totalReviews || 0,
-          };
-        })
-      );
+    aggregationPipeline.push({
+      $unwind: {
+        path: "$clinicDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    });
 
-      const hasMore = page * pageSize < total;
+    aggregationPipeline.push({
+      $project: {
+        name: 1,
+        slug: 1,
+        specialty: 1,
+        experience: 1,
+        fees: 1,
+        avatar: 1,
+        about: 1,
+        isActive: 1,
+        rating: { $round: ["$averageRating", 1] },
+        reviewCount: "$totalReviews",
+        clinic: {
+          _id: "$clinicDetails._id",
+          name: "$clinicDetails.name",
+          address: "$clinicDetails.address",
+        },
+      },
+    });
+
+    aggregationPipeline.push({ $sort: { experience: -1 } });
+
+    const totalDocs = await Doctor.aggregate([
+      ...aggregationPipeline,
+      { $count: "total" },
+    ]);
+    const total = totalDocs[0]?.total || 0;
+
+    let doctors = [];
+    if (page && pageSize) {
+      const currentPage = parseInt(page);
+      const limit = parseInt(pageSize);
+      const skip = (currentPage - 1) * limit;
+
+      aggregationPipeline.push({ $skip: skip }, { $limit: limit });
+
+      doctors = await Doctor.aggregate(aggregationPipeline);
 
       return res.status(200).json({
         success: true,
         data: {
-          doctors: doctorsWithRatings,
-          hasMore,
-          total,
+          doctors,
+          pagination: {
+            page: currentPage,
+            pageSize: limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+          hasMore: skip + doctors.length < total,
         },
       });
     } else {
-      const doctors = await Doctor.find(filter)
-        .populate("clinic", "name")
-        .sort({ experience: -1 });
-
-      const doctorsWithRatings = await Promise.all(
-        doctors.map(async (doctor) => {
-          const reviews = await ReviewDoctor.aggregate([
-            { $match: { doctor: doctor._id } },
-            {
-              $group: {
-                _id: null,
-                averageRating: { $avg: "$rate" },
-                totalReviews: { $sum: 1 },
-              },
-            },
-          ]);
-
-          const rating = reviews[0] || { averageRating: 0, totalReviews: 0 };
-          return {
-            ...doctor.toObject(),
-            rating: Number(rating.averageRating?.toFixed(1)) || 0, // Formatted rating
-            reviewCount: rating.totalReviews || 0, // Renamed to reviewCount
-          };
-        })
-      );
+      doctors = await Doctor.aggregate(aggregationPipeline);
 
       return res.status(200).json({
         success: true,
         data: {
-          doctors: doctorsWithRatings,
+          doctors,
           total: doctors.length,
+          hasMore: false,
         },
       });
     }
@@ -480,7 +535,7 @@ export const getDoctorsByCustomer = async (req, res) => {
     console.log(error);
     return res.status(500).json({
       success: false,
-      data: [],
+      message: "Lỗi khi lấy danh sách bác sĩ",
       error: error.message,
     });
   }
@@ -608,28 +663,25 @@ export const getScheduleByDoctor = async (req, res) => {
 
 export const getDoctorFilterOptions = async (req, res) => {
   try {
-
-    const specialties = await Doctor.distinct('specialty');
-
-    // 2. Get experience ranges
+    const specialties = await Doctor.distinct("specialty");
     const experienceRanges = [
       { label: "Dưới 2 năm", value: "0-2", min: 0, max: 2 },
       { label: "2-5 năm", value: "2-5", min: 2, max: 5 },
       { label: "5-10 năm", value: "5-10", min: 5, max: 10 },
-      { label: "Trên 10 năm", value: "10+", min: 10, max: null }
+      { label: "Trên 10 năm", value: "10+", min: 10, max: null },
     ];
 
     const priceStats = await Doctor.aggregate([
       {
-        $match: { isActive: true }
+        $match: { isActive: true },
       },
       {
         $group: {
           _id: null,
           minFee: { $min: "$fees" },
-          maxFee: { $max: "$fees" }
-        }
-      }
+          maxFee: { $max: "$fees" },
+        },
+      },
     ]);
 
     let priceRanges = [];
@@ -647,8 +699,11 @@ export const getDoctorFilterOptions = async (req, res) => {
         priceRanges.push({
           min: rangeMin,
           max: rangeMax,
-          label: `${formatPrice(rangeMin, true)} - ${formatPrice(rangeMax, true)}`,
-          value: `${rangeMin}-${rangeMax}`
+          label: `${formatPrice(rangeMin, true)} - ${formatPrice(
+            rangeMax,
+            true
+          )}`,
+          value: `${rangeMin}-${rangeMax}`,
         });
       }
     }
@@ -658,63 +713,63 @@ export const getDoctorFilterOptions = async (req, res) => {
         $group: {
           _id: null,
           avgRating: { $avg: "$rate" },
-          totalReviews: { $sum: 1 }
-        }
-      }
+          totalReviews: { $sum: 1 },
+        },
+      },
     ]);
 
     const ratingOptions = [
       { label: "Trên 4.5 ⭐", value: 4.5 },
       { label: "Trên 4.0 ⭐", value: 4.0 },
-      { label: "Trên 3.5 ⭐", value: 3.5 }
+      { label: "Trên 3.5 ⭐", value: 3.5 },
     ];
 
     // 5. Get active clinics
     const clinics = await Clinic.find({ isActive: true })
-      .select('name address')
+      .select("name address")
       .limit(10);
 
     // 6. Status options
     const statusOptions = [
       { label: "Đang làm việc", value: true },
-      { label: "Tạm nghỉ", value: false }
+      { label: "Tạm nghỉ", value: false },
     ];
 
     // Get overall statistics
     const stats = await Doctor.aggregate([
       {
         $lookup: {
-          from: 'reviewdoctors',
-          localField: '_id',
-          foreignField: 'doctor',
-          as: 'reviews'
-        }
+          from: "reviewdoctors",
+          localField: "_id",
+          foreignField: "doctor",
+          as: "reviews",
+        },
       },
       {
         $group: {
           _id: null,
           totalDoctors: { $sum: 1 },
-          activeDoctors: { $sum: { $cond: ["$isActive", 1, 0] }},
+          activeDoctors: { $sum: { $cond: ["$isActive", 1, 0] } },
           avgExperience: { $avg: "$experience" },
-          avgRating: { $avg: { $avg: "$reviews.rate" }}
-        }
-      }
+          avgRating: { $avg: { $avg: "$reviews.rate" } },
+        },
+      },
     ]);
 
     return res.status(200).json({
       success: true,
       data: {
         specialties: {
-          options: specialties.map(specialty => ({
+          options: specialties.map((specialty) => ({
             label: specialty,
-            value: specialty
-          }))
+            value: specialty,
+          })),
         },
         experience: {
           options: experienceRanges,
           stats: {
-            avg: Math.round(stats[0]?.avgExperience || 0)
-          }
+            avg: Math.round(stats[0]?.avgExperience || 0),
+          },
         },
         prices: {
           ranges: priceRanges,
@@ -723,40 +778,39 @@ export const getDoctorFilterOptions = async (req, res) => {
             max: priceStats[0]?.maxFee || 0,
             formatted: {
               min: formatPrice(priceStats[0]?.minFee || 0),
-              max: formatPrice(priceStats[0]?.maxFee || 0)
-            }
-          }
+              max: formatPrice(priceStats[0]?.maxFee || 0),
+            },
+          },
         },
         ratings: {
           options: ratingOptions,
           stats: {
             average: Number((ratingStats[0]?.avgRating || 0).toFixed(1)),
-            total: ratingStats[0]?.totalReviews || 0
-          }
+            total: ratingStats[0]?.totalReviews || 0,
+          },
         },
         clinics: {
-          options: clinics.map(clinic => ({
+          options: clinics.map((clinic) => ({
             label: clinic.name,
             value: clinic._id,
-            address: clinic.address
-          }))
+            address: clinic.address,
+          })),
         },
         status: {
           options: statusOptions,
           stats: {
             total: stats[0]?.totalDoctors || 0,
-            active: stats[0]?.activeDoctors || 0
-          }
-        }
-      }
+            active: stats[0]?.activeDoctors || 0,
+          },
+        },
+      },
     });
-
   } catch (error) {
     console.log(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy thông tin filter",
-      error: error.message
+      error: error.message,
     });
   }
 };

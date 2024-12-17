@@ -579,63 +579,181 @@ export const updateClinicByOwner = async (req, res) => {
 
 export const getClinicsByCustomer = async (req, res) => {
   try {
-    const { search = "", specialty = "" } = req.query;
-    let filter = { isActive: true };
+    const {
+      page,
+      pageSize,
+      search = "",
+      specialties = "",
+      priceRange = "",
+      doctorCount = "",
+      rating = "",
+      workingHours = "",
+    } = req.query;
 
+    let matchStage = { isActive: true };
+
+    // Basic search filter
     if (search) {
-      filter.$or = [
+      matchStage.$or = [
         { name: { $regex: search, $options: "i" } },
         { address: { $regex: search, $options: "i" } },
       ];
     }
 
-    if (specialty) {
-      filter.specialties = { $in: [specialty] };
+    // Specialty filter
+    if (specialties) {
+      matchStage.specialties = { $in: specialties.split(",") };
     }
 
-    // If page & pageSize provided, do pagination
-    if (req.query.page && req.query.pageSize) {
-      const page = parseInt(req.query.page);
-      const pageSize = parseInt(req.query.pageSize);
+    // Doctor count filter
+    if (doctorCount) {
+      const [min, max] = doctorCount.split("-").map(Number);
+      const doctorCountMatch = await Doctor.aggregate([
+        {
+          $group: {
+            _id: "$clinic",
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $match: {
+            count: max ? { $gte: min, $lte: max } : { $gte: min }
+          }
+        }
+      ]);
+      
+      const clinicIds = doctorCountMatch.map(d => d._id);
+      matchStage._id = { $in: clinicIds };
+    }
 
-      const [clinics, total] = await Promise.all([
-        Clinic.find(filter)
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * pageSize)
-          .limit(pageSize)
-          .lean(),
-        Clinic.countDocuments(filter),
+    // Rating filter
+    if (rating) {
+      const minRating = parseFloat(rating);
+      const reviewMatch = await ReviewClinic.aggregate([
+        {
+          $group: {
+            _id: "$clinic",
+            avgRating: { $avg: "$rate" }
+          }
+        },
+        {
+          $match: {
+            avgRating: { $gte: minRating }
+          }
+        }
       ]);
 
-      const hasMore = page * pageSize < total;
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          clinics,
-          hasMore,
-          total,
-        },
-      });
-
-      // Otherwise return all results
-    } else {
-      const clinics = await Clinic.find(filter).sort({ createdAt: -1 }).lean();
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          clinics,
-          total: clinics.length,
-        },
-      });
+      const clinicIds = reviewMatch.map(r => r._id);
+      matchStage._id = matchStage._id 
+        ? { $in: matchStage._id.$in.filter(id => clinicIds.includes(id)) }
+        : { $in: clinicIds };
     }
+
+    // Working hours filter
+    if (workingHours) {
+      const [start, end] = workingHours.split("-");
+      matchStage["workingHours"] = {
+        $elemMatch: {
+          startTime: { $lte: start },
+          endTime: { $gte: end },
+          isOpen: true
+        }
+      };
+    }
+
+    const aggregationPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: "reviewclinics",
+          localField: "_id",
+          foreignField: "clinic",
+          as: "reviews"
+        }
+      },
+      {
+        $lookup: {
+          from: "doctors", 
+          localField: "_id",
+          foreignField: "clinic",
+          as: "doctors"
+        }
+      },
+      {
+        $addFields: {
+          averageRating: {
+            $cond: [
+              { $gt: [{ $size: "$reviews" }, 0] },
+              { $avg: "$reviews.rate" },
+              0
+            ]
+          },
+          totalReviews: { $size: "$reviews" },
+          doctorCount: { $size: "$doctors" },
+          statistics: {
+            averageRating: {
+              $cond: [
+                { $gt: [{ $size: "$reviews" }, 0] },
+                { $round: [{ $avg: "$reviews.rate" }, 1] },
+                0
+              ]
+            },
+            totalReviews: { $size: "$reviews" },
+            doctorCount: { $size: "$doctors" }
+          }
+        }
+      },
+      {
+        $project: {
+          reviews: 0,
+          doctors: 0
+        }
+      }
+    ];
+
+    // Add sorting
+    aggregationPipeline.push({ $sort: { createdAt: -1 } });
+
+    // Get total count before pagination
+    const totalDocs = await Clinic.aggregate([
+      ...aggregationPipeline,
+      { $count: "total" }
+    ]);
+    const total = totalDocs[0]?.total || 0;
+
+    // Add pagination if requested
+    if (page && pageSize) {
+      const skip = (parseInt(page) - 1) * parseInt(pageSize);
+      aggregationPipeline.push(
+        { $skip: skip },
+        { $limit: parseInt(pageSize) }
+      );
+    }
+
+    const clinics = await Clinic.aggregate(aggregationPipeline);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        clinics,
+        pagination: page && pageSize ? {
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          total,
+          totalPages: Math.ceil(total / parseInt(pageSize)),
+        } : null,
+        hasMore: page && pageSize ? 
+          (parseInt(page) * parseInt(pageSize)) < total : 
+          false
+      }
+    });
+
   } catch (error) {
-    console.log(error);
+    console.error("Get clinics error:", error);
     return res.status(500).json({
       success: false,
-      data: [],
-      error: error.message,
+      message: "Lỗi khi lấy danh sách phòng khám",
+      error: error.message
     });
   }
 };
