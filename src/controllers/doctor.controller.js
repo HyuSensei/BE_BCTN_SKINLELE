@@ -6,6 +6,7 @@ import ReviewDoctor from "../models/review-doctor.model.js";
 import Schedule from "../models/schedule.model.js";
 import moment from "moment";
 import { formatPrice } from "../ultis/formatPrice.js";
+import { Types } from "mongoose";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createDoctor = async (req, res) => {
@@ -417,7 +418,7 @@ export const getDoctorsByCustomer = async (req, res) => {
     }
 
     if (clinic) {
-      filter.clinic = clinic;
+      filter.clinic = new Types.ObjectId(`${clinic}`);
     }
 
     const aggregationPipeline = [
