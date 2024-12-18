@@ -2,25 +2,15 @@ import { convertToVietnameseDay } from "../helpers/convert.js";
 import Booking from "../models/booking.model.js";
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
-import Schedule from "../models/schedule.model.js";
 import moment from "moment";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createBooking = async (req, res) => {
   try {
-    const { clinic, doctor, date, startTime, endTime, customer, price, note } =
-      req.body;
+    const { clinic, doctor, date, startTime, endTime, customer, price, note } = req.body;
     const user = req.user._id;
 
-    if (
-      !clinic ||
-      !doctor ||
-      !date ||
-      !startTime ||
-      !endTime ||
-      !customer ||
-      !price
-    ) {
+    if (!clinic || !doctor || !date || !startTime || !endTime || !customer || !price) {
       return res.status(400).json({
         success: false,
         message: "Vui lòng điền đầy đủ thông tin đặt lịch",
@@ -88,19 +78,22 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    const schedule = await Schedule.findOne({ doctor: doctor });
-    if (!schedule) {
+    const isClinicHoliday = clinicExists.holidays.some((holiday) =>
+      moment(holiday).isSame(bookingDate, "day")
+    );
+
+    if (isClinicHoliday) {
       return res.status(400).json({
         success: false,
-        message: "Bác sĩ chưa có lịch làm việc",
+        message: "Phòng khám không làm việc vào ngày này (ngày nghỉ)",
       });
     }
 
-    const isHoliday = schedule.holidays.some((holiday) =>
-      moment(holiday).startOf("day").isSame(bookingDate)
+    const isDoctorHoliday = doctorExists.holidays.some((holiday) =>
+      moment(holiday).isSame(bookingDate, "day")
     );
 
-    if (isHoliday) {
+    if (isDoctorHoliday) {
       return res.status(400).json({
         success: false,
         message: "Bác sĩ không làm việc vào ngày này (ngày nghỉ)",
@@ -108,30 +101,44 @@ export const createBooking = async (req, res) => {
     }
 
     const dayOfWeek = convertToVietnameseDay(bookingDate);
-    const daySchedule = schedule.schedule.find(
-      (s) => s.dayOfWeek === dayOfWeek
+    const workingHours = clinicExists.workingHours.find(
+      (hours) => hours.dayOfWeek === dayOfWeek && hours.isOpen
     );
 
-    if (!daySchedule || !daySchedule.isActive) {
+    if (!workingHours) {
       return res.status(400).json({
         success: false,
-        message: `Bác sĩ không làm việc vào ${dayOfWeek}`,
+        message: `Phòng khám không làm việc vào ${dayOfWeek}`,
       });
     }
 
-    const scheduleStart = moment(daySchedule.startTime, "HH:mm");
-    const scheduleEnd = moment(daySchedule.endTime, "HH:mm");
+    const clinicStart = moment(workingHours.startTime, "HH:mm");
+    const clinicEnd = moment(workingHours.endTime, "HH:mm");
 
-    if (startMoment.isBefore(scheduleStart) || endMoment.isAfter(scheduleEnd)) {
+    if (startMoment.isBefore(clinicStart) || endMoment.isAfter(clinicEnd)) {
       return res.status(400).json({
         success: false,
-        message: `Thời gian đặt lịch phải nằm trong khung giờ làm việc (${daySchedule.startTime} - ${daySchedule.endTime})`,
+        message: `Thời gian đặt lịch phải nằm trong khung giờ làm việc (${workingHours.startTime} - ${workingHours.endTime})`,
       });
+    }
+
+    if (workingHours.breakTime) {
+      const breakStart = moment(workingHours.breakTime.start, "HH:mm");
+      const breakEnd = moment(workingHours.breakTime.end, "HH:mm");
+
+      if (
+        (startMoment.isBetween(breakStart, breakEnd, undefined, '[]') ||
+        endMoment.isBetween(breakStart, breakEnd, undefined, '[]'))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Thời gian đặt lịch trùng với giờ nghỉ trưa (${workingHours.breakTime.start} - ${workingHours.breakTime.end})`,
+        });
+      }
     }
 
     const existingBooking = await Booking.findOne({
       doctor,
-      clinic,
       date: bookingDate.toDate(),
       $or: [
         {
@@ -186,10 +193,14 @@ export const createBooking = async (req, res) => {
       ],
     });
 
+    const populatedBooking = await Booking.findById(booking._id)
+      .populate("doctor", "name email phone avatar specialty")
+      .populate("clinic", "name logo address");
+
     return res.status(201).json({
       success: true,
       message: "Đặt lịch khám thành công",
-      data: booking,
+      data: populatedBooking,
     });
   } catch (error) {
     console.error("Create booking error:", error);
@@ -200,50 +211,6 @@ export const createBooking = async (req, res) => {
     });
   }
 };
-
-// export const updateStatusBooking = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const { status, cancelReason, model } = req.body;
-//     const updatedBy = req.user._id;
-
-//     const booking = await Booking.findById(id);
-//     if (!booking) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Không tìm thấy lịch khám",
-//       });
-//     }
-
-//     const prevStatus = booking.status;
-//     booking.status = status;
-
-//     if (status === "cancelled" && cancelReason) {
-//       booking.cancelReason = cancelReason;
-//     }
-
-//     booking.statusHistory.push({
-//       prevStatus,
-//       status,
-//       updatedBy,
-//       updatedByModel: model,
-//     });
-
-//     await booking.save();
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Cập nhật trạng thái lịch khám thành công",
-//       data: booking,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       success: false,
-//       message: "Lỗi khi cập nhật trạng thái",
-//       error: error.message,
-//     });
-//   }
-// };
 
 export const updateStatusBooking = async (req, res) => {
   try {
