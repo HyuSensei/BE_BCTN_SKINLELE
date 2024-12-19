@@ -64,7 +64,7 @@ router.use(
 );
 router.use(
   "/admin-accounts",
-  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE])),
+  authMiddlewareAdmin(accessRole([ADMIN_ROLE, SUPPORT_ROLE, CLINIC_ROLE])),
   adminAccountRoutes
 );
 router.use("/clinics", clinicRoutes);

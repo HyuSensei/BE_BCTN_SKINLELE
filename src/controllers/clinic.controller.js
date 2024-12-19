@@ -518,7 +518,7 @@ export const updateClinicByOwner = async (req, res) => {
       workingHours,
       holidays,
     } = req.body;
-    
+
     const clinic = await Clinic.findOne({ admin: adminId });
     if (!clinic) {
       return res.status(404).json({
@@ -549,7 +549,7 @@ export const updateClinicByOwner = async (req, res) => {
     if (banners) updateFields.banners = banners;
     if (workingHours) updateFields.workingHours = workingHours;
     if (holidays) updateFields.holidays = holidays;
- 
+
     const updatedClinic = await Clinic.findOneAndUpdate(
       { admin: adminId },
       { $set: updateFields },
@@ -605,25 +605,67 @@ export const getClinicsByCustomer = async (req, res) => {
       matchStage.specialties = { $in: specialties.split(",") };
     }
 
+    // Price Range filter
+    let clinicIdsFromPriceRange;
+    if (priceRange) {
+      const [min, max] = priceRange.split("-").map(Number);
+      const doctorsInPriceRange = await Doctor.aggregate([
+        {
+          $match: {
+            fees: {
+              $gte: min,
+              $lte: max,
+            },
+            isActive: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$clinic",
+            avgFees: { $avg: "$fees" },
+          },
+        },
+      ]);
+
+      clinicIdsFromPriceRange = doctorsInPriceRange.map((d) => d._id);
+
+      if (matchStage._id) {
+        matchStage._id.$in = matchStage._id.$in.filter((id) =>
+          clinicIdsFromPriceRange.includes(id)
+        );
+      } else {
+        matchStage._id = { $in: clinicIdsFromPriceRange };
+      }
+    }
+
     // Doctor count filter
     if (doctorCount) {
       const [min, max] = doctorCount.split("-").map(Number);
       const doctorCountMatch = await Doctor.aggregate([
         {
+          $match: { isActive: true },
+        },
+        {
           $group: {
             _id: "$clinic",
-            count: { $sum: 1 }
-          }
+            count: { $sum: 1 },
+          },
         },
         {
           $match: {
-            count: max ? { $gte: min, $lte: max } : { $gte: min }
-          }
-        }
+            count: max ? { $gte: min, $lte: max } : { $gte: min },
+          },
+        },
       ]);
-      
-      const clinicIds = doctorCountMatch.map(d => d._id);
-      matchStage._id = { $in: clinicIds };
+
+      const clinicIds = doctorCountMatch.map((d) => d._id);
+      if (matchStage._id) {
+        matchStage._id.$in = matchStage._id.$in.filter((id) =>
+          clinicIds.includes(id)
+        );
+      } else {
+        matchStage._id = { $in: clinicIds };
+      }
     }
 
     // Rating filter
@@ -633,20 +675,24 @@ export const getClinicsByCustomer = async (req, res) => {
         {
           $group: {
             _id: "$clinic",
-            avgRating: { $avg: "$rate" }
-          }
+            avgRating: { $avg: "$rate" },
+          },
         },
         {
           $match: {
-            avgRating: { $gte: minRating }
-          }
-        }
+            avgRating: { $gte: minRating },
+          },
+        },
       ]);
 
-      const clinicIds = reviewMatch.map(r => r._id);
-      matchStage._id = matchStage._id 
-        ? { $in: matchStage._id.$in.filter(id => clinicIds.includes(id)) }
-        : { $in: clinicIds };
+      const clinicIds = reviewMatch.map((r) => r._id);
+      if (matchStage._id) {
+        matchStage._id.$in = matchStage._id.$in.filter((id) =>
+          clinicIds.includes(id)
+        );
+      } else {
+        matchStage._id = { $in: clinicIds };
+      }
     }
 
     // Working hours filter
@@ -656,8 +702,8 @@ export const getClinicsByCustomer = async (req, res) => {
         $elemMatch: {
           startTime: { $lte: start },
           endTime: { $gte: end },
-          isOpen: true
-        }
+          isOpen: true,
+        },
       };
     }
 
@@ -668,16 +714,17 @@ export const getClinicsByCustomer = async (req, res) => {
           from: "reviewclinics",
           localField: "_id",
           foreignField: "clinic",
-          as: "reviews"
-        }
+          as: "reviews",
+        },
       },
       {
         $lookup: {
-          from: "doctors", 
+          from: "doctors",
           localField: "_id",
           foreignField: "clinic",
-          as: "doctors"
-        }
+          as: "doctors",
+          pipeline: [{ $match: { isActive: true } }],
+        },
       },
       {
         $addFields: {
@@ -685,49 +732,71 @@ export const getClinicsByCustomer = async (req, res) => {
             $cond: [
               { $gt: [{ $size: "$reviews" }, 0] },
               { $avg: "$reviews.rate" },
-              0
-            ]
+              0,
+            ],
           },
           totalReviews: { $size: "$reviews" },
           doctorCount: { $size: "$doctors" },
+          averageFees: {
+            $cond: [
+              { $gt: [{ $size: "$doctors" }, 0] },
+              { $avg: "$doctors.fees" },
+              0,
+            ],
+          },
           statistics: {
             averageRating: {
               $cond: [
                 { $gt: [{ $size: "$reviews" }, 0] },
                 { $round: [{ $avg: "$reviews.rate" }, 1] },
-                0
-              ]
+                0,
+              ],
             },
             totalReviews: { $size: "$reviews" },
-            doctorCount: { $size: "$doctors" }
-          }
-        }
+            doctorCount: { $size: "$doctors" },
+            averageFees: {
+              $round: [
+                {
+                  $cond: [
+                    { $gt: [{ $size: "$doctors" }, 0] },
+                    { $avg: "$doctors.fees" },
+                    0,
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+        },
       },
       {
         $project: {
           reviews: 0,
-          doctors: 0
-        }
-      }
+          doctors: 0,
+        },
+      },
     ];
 
     // Add sorting
-    aggregationPipeline.push({ $sort: { createdAt: -1 } });
+    aggregationPipeline.push({
+      $sort: {
+        doctorCount: -1,
+        averageRating: -1,
+        createdAt: -1,
+      },
+    });
 
     // Get total count before pagination
     const totalDocs = await Clinic.aggregate([
       ...aggregationPipeline,
-      { $count: "total" }
+      { $count: "total" },
     ]);
     const total = totalDocs[0]?.total || 0;
 
     // Add pagination if requested
     if (page && pageSize) {
       const skip = (parseInt(page) - 1) * parseInt(pageSize);
-      aggregationPipeline.push(
-        { $skip: skip },
-        { $limit: parseInt(pageSize) }
-      );
+      aggregationPipeline.push({ $skip: skip }, { $limit: parseInt(pageSize) });
     }
 
     const clinics = await Clinic.aggregate(aggregationPipeline);
@@ -736,24 +805,28 @@ export const getClinicsByCustomer = async (req, res) => {
       success: true,
       data: {
         clinics,
-        pagination: page && pageSize ? {
-          page: parseInt(page),
-          pageSize: parseInt(pageSize),
-          total,
-          totalPages: Math.ceil(total / parseInt(pageSize)),
-        } : null,
-        hasMore: page && pageSize ? 
-          (parseInt(page) * parseInt(pageSize)) < total : 
-          false
-      }
+        pagination:
+          page && pageSize
+            ? {
+                page: parseInt(page),
+                pageSize: parseInt(pageSize),
+                total,
+                totalPages: Math.ceil(total / parseInt(pageSize)),
+              }
+            : null,
+        hasMore:
+          page && pageSize
+            ? parseInt(page) * parseInt(pageSize) < total
+            : false,
+      },
     });
-
   } catch (error) {
     console.error("Get clinics error:", error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy danh sách phòng khám",
-      error: error.message
+      error: error.message,
+      data:[]
     });
   }
 };
@@ -762,15 +835,15 @@ export const getClinicFilterOptions = async (req, res) => {
   try {
     const doctorPrices = await Doctor.aggregate([
       {
-        $match: { isActive: true }
+        $match: { isActive: true },
       },
       {
         $group: {
           _id: null,
           minPrice: { $min: "$fees" },
-          maxPrice: { $max: "$fees" }
-        }
-      }
+          maxPrice: { $max: "$fees" },
+        },
+      },
     ]);
 
     const prices = doctorPrices[0] || { minPrice: 0, maxPrice: 0 };
@@ -789,8 +862,11 @@ export const getClinicFilterOptions = async (req, res) => {
         priceRanges.push({
           min: rangeMin,
           max: rangeMax,
-          label: `${formatPrice(rangeMin, true)} - ${formatPrice(rangeMax, true)}`,
-          value: `${rangeMin}-${rangeMax}`
+          label: `${formatPrice(rangeMin, true)} - ${formatPrice(
+            rangeMax,
+            true
+          )}`,
+          value: `${rangeMin}-${rangeMax}`,
         });
       }
     }
@@ -798,94 +874,109 @@ export const getClinicFilterOptions = async (req, res) => {
     const doctorCountRanges = await Clinic.aggregate([
       {
         $lookup: {
-          from: 'doctors',
-          localField: '_id',
-          foreignField: 'clinic',
-          as: 'doctors'
-        }
+          from: "doctors",
+          localField: "_id",
+          foreignField: "clinic",
+          as: "doctors",
+        },
       },
       {
         $group: {
           _id: null,
-          counts: { $push: { $size: '$doctors' } }
-        }
+          counts: { $push: { $size: "$doctors" } },
+        },
       },
       {
         $project: {
           _id: 0,
-          min: { $min: '$counts' },
-          max: { $max: '$counts' }
-        }
-      }
+          min: { $min: "$counts" },
+          max: { $max: "$counts" },
+        },
+      },
     ]);
 
     const doctorCounts = doctorCountRanges[0] || { min: 0, max: 0 };
     const doctorCountOptions = [
-      { label: '1-5 bác sĩ', value: '1-5', min: 1, max: 5 },
-      { label: '6-10 bác sĩ', value: '6-10', min: 6, max: 10 },
-      { label: '11-20 bác sĩ', value: '11-20', min: 11, max: 20 },
-      { label: 'Trên 20 bác sĩ', value: '20+', min: 20, max: null }
+      { label: "1-5 bác sĩ", value: "1-5", min: 1, max: 5 },
+      { label: "6-10 bác sĩ", value: "6-10", min: 6, max: 10 },
+      { label: "11-20 bác sĩ", value: "11-20", min: 11, max: 20 },
+      { label: "Trên 20 bác sĩ", value: "20+", min: 20, max: null },
     ];
 
     const ratingStats = await ReviewClinic.aggregate([
       {
         $group: {
           _id: null,
-          averageRating: { $avg: '$rate' },
-          ratings: { $push: '$rate' }
-        }
-      }
+          averageRating: { $avg: "$rate" },
+          ratings: { $push: "$rate" },
+        },
+      },
     ]);
 
     const ratingOptions = [
-      { label: 'Trên 4.5 ⭐', value: '4.5', min: 4.5 },
-      { label: 'Trên 4.0 ⭐', value: '4.0', min: 4.0 },
-      { label: 'Trên 3.5 ⭐', value: '3.5', min: 3.5 },
-      { label: 'Trên 3.0 ⭐', value: '3.0', min: 3.0 }
+      { label: "Trên 4.5 ⭐", value: "4.5", min: 4.5 },
+      { label: "Trên 4.0 ⭐", value: "4.0", min: 4.0 },
+      { label: "Trên 3.5 ⭐", value: "3.5", min: 3.5 },
+      { label: "Trên 3.0 ⭐", value: "3.0", min: 3.0 },
     ];
 
     const workingHourOptions = [
-      { label: 'Sáng (06:00 - 12:00)', value: 'morning', start: '06:00', end: '12:00' },
-      { label: 'Chiều (12:00 - 18:00)', value: 'afternoon', start: '12:00', end: '18:00' },
-      { label: 'Tối (18:00 - 22:00)', value: 'evening', start: '18:00', end: '22:00' },
-      { label: 'Cả ngày', value: 'allday' }
+      {
+        label: "Sáng (06:00 - 12:00)",
+        value: "morning",
+        start: "06:00",
+        end: "12:00",
+      },
+      {
+        label: "Chiều (12:00 - 18:00)",
+        value: "afternoon",
+        start: "12:00",
+        end: "18:00",
+      },
+      {
+        label: "Tối (18:00 - 22:00)",
+        value: "evening",
+        start: "18:00",
+        end: "22:00",
+      },
+      { label: "Cả ngày", value: "allday" },
     ];
 
     const statusOptions = [
-      { label: 'Đang hoạt động', value: true },
-      { label: 'Tạm ngừng', value: false }
+      { label: "Đang hoạt động", value: true },
+      { label: "Tạm ngừng", value: false },
     ];
 
     const clinicStats = await Clinic.aggregate([
       {
         $lookup: {
-          from: 'doctors',
-          localField: '_id',
-          foreignField: 'clinic',
-          as: 'doctors'
-        }
+          from: "doctors",
+          localField: "_id",
+          foreignField: "clinic",
+          as: "doctors",
+        },
       },
       {
         $lookup: {
-          from: 'reviewclinics',
-          localField: '_id',
-          foreignField: 'clinic',
-          as: 'reviews'
-        }
+          from: "reviewclinics",
+          localField: "_id",
+          foreignField: "clinic",
+          as: "reviews",
+        },
       },
       {
         $group: {
           _id: null,
           total: { $sum: 1 },
           activeCount: {
-            $sum: { $cond: ['$isActive', 1, 0] }
+            $sum: { $cond: ["$isActive", 1, 0] },
           },
           inactiveCount: {
-            $sum: { $cond: ['$isActive', 0, 1] }
+            $sum: { $cond: ["$isActive", 0, 1] },
           },
-          avgRating: { $avg: { $avg: '$reviews.rate' } }
-        }
-      }
+          avgRating: { $avg: { $avg: "$reviews.rate" } },
+        },
+      },
     ]);
 
     return res.status(200).json({
@@ -898,17 +989,17 @@ export const getClinicFilterOptions = async (req, res) => {
             max: prices.maxPrice,
             formatted: {
               min: formatPrice(prices.minPrice),
-              max: formatPrice(prices.maxPrice)
-            }
-          }
+              max: formatPrice(prices.maxPrice),
+            },
+          },
         },
         doctorCounts: {
           options: doctorCountOptions,
-          stats: doctorCounts
+          stats: doctorCounts,
         },
         ratings: {
           options: ratingOptions,
-          stats: ratingStats[0] || { averageRating: 0 }
+          stats: ratingStats[0] || { averageRating: 0 },
         },
         workingHours: workingHourOptions,
         status: {
@@ -916,17 +1007,17 @@ export const getClinicFilterOptions = async (req, res) => {
           stats: clinicStats[0] || {
             total: 0,
             activeCount: 0,
-            inactiveCount: 0
-          }
-        }
-      }
+            inactiveCount: 0,
+          },
+        },
+      },
     });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy thông tin filter",
-      error: error.message
+      error: error.message,
     });
   }
 };

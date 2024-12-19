@@ -1,6 +1,7 @@
 import ReviewClinic from "../models/review-clinic.model.js";
 import Clinic from "../models/clinic.model.js";
 import Booking from "../models/booking.model.js";
+import { Types } from "mongoose";
 
 export const createReviewClinic = async (req, res) => {
   try {
@@ -14,38 +15,38 @@ export const createReviewClinic = async (req, res) => {
       });
     }
 
-    const clinicExists = await Clinic.findById(clinic);
-    if (!clinicExists) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy phòng khám",
-      });
-    }
+    // const clinicExists = await Clinic.findById(clinic);
+    // if (!clinicExists) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "Không tìm thấy phòng khám",
+    //   });
+    // }
 
-    const hasBooking = await Booking.findOne({
-      user,
-      clinic,
-      status: "completed",
-    });
+    // const hasBooking = await Booking.findOne({
+    //   user,
+    //   clinic,
+    //   status: "completed",
+    // });
 
-    if (!hasBooking) {
-      return res.status(400).json({
-        success: false,
-        message: "Bạn cần có lịch khám đã hoàn thành để đánh giá phòng khám",
-      });
-    }
+    // if (!hasBooking) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Bạn cần có lịch khám đã hoàn thành để đánh giá phòng khám",
+    //   });
+    // }
 
-    const existingReview = await ReviewClinic.findOne({
-      user,
-      clinic,
-    });
+    // const existingReview = await ReviewClinic.findOne({
+    //   user,
+    //   clinic,
+    // });
 
-    if (existingReview) {
-      return res.status(400).json({
-        success: false,
-        message: "Bạn đã đánh giá phòng khám này",
-      });
-    }
+    // if (existingReview) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Bạn đã đánh giá phòng khám này",
+    //   });
+    // }
 
     const review = await ReviewClinic.create({
       clinic,
@@ -159,7 +160,7 @@ export const getAllReviewClinic = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy danh sách đánh giá",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -215,10 +216,10 @@ export const getReviewsClinicByCustomer = async (req, res) => {
       rating,
     } = req.query;
 
-    let filter = {isActive:true};
+    let filter = { isActive: true };
 
     if (clinicId) {
-      filter.clinic = clinicId;
+      filter.clinic = new Types.ObjectId(`${clinicId}`);
     }
 
     if (rating) {
@@ -292,7 +293,7 @@ export const getReviewsClinicByCustomer = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy danh sách đánh giá",
-      error: error.message
+      error: error.message,
     });
   }
 };

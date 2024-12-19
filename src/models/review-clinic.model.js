@@ -6,11 +6,13 @@ const ReviewClinicSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Clinic",
       required: true,
+      index: true, 
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true, 
     },
     rate: {
       type: Number,
@@ -20,13 +22,22 @@ const ReviewClinicSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    isActive:{
+    isActive: {
       type: Boolean,
-      default:true
-    }
+      default: true,
+      index: true,
+    },
+    likes: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true }
 );
+
+ReviewClinicSchema.index({ clinic: 1, isActive: 1 });
 
 const ReviewClinic = mongoose.model("ReviewClinic", ReviewClinicSchema);
 
