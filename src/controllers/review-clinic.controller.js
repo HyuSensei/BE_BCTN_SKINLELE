@@ -104,7 +104,6 @@ export const getAllReviewClinic = async (req, res) => {
       ReviewClinic.countDocuments(filter),
     ]);
 
-    // Initialize default rating distribution with all ratings set to 0
     const defaultRatingDistribution = {
       1: 0,
       2: 0,
@@ -126,7 +125,6 @@ export const getAllReviewClinic = async (req, res) => {
       },
     ]);
 
-    // Merge actual ratings with default distribution
     const ratingDistribution =
       stats[0]?.ratingDistribution.reduce(
         (acc, rate) => {
@@ -138,7 +136,6 @@ export const getAllReviewClinic = async (req, res) => {
 
     const currentPage = parseInt(page);
     const totalPages = Math.ceil(total / parseInt(pageSize));
-    const hasMore = currentPage < totalPages;
 
     return res.status(200).json({
       success: true,
@@ -150,7 +147,6 @@ export const getAllReviewClinic = async (req, res) => {
           totalPage: totalPages,
           totalItems: total,
         },
-        hasMore,
         stats: {
           averageRating: stats[0]?.averageRating || 0,
           totalReviews: total,
@@ -204,6 +200,99 @@ export const removeReviewClinic = async (req, res) => {
       success: false,
       message: "Lỗi khi xóa đánh giá",
       error: error.message,
+    });
+  }
+};
+
+export const getReviewsClinicByCustomer = async (req, res) => {
+  try {
+    const {
+      clinicId,
+      page = 1,
+      pageSize = 10,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      rating,
+    } = req.query;
+
+    let filter = {isActive:true};
+
+    if (clinicId) {
+      filter.clinic = clinicId;
+    }
+
+    if (rating) {
+      filter.rate = parseInt(rating);
+    }
+
+    const [reviews, total] = await Promise.all([
+      ReviewClinic.find(filter)
+        .populate("user", "name avatar")
+        .populate("clinic", "name")
+        .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize),
+      ReviewClinic.countDocuments(filter),
+    ]);
+
+    const defaultRatingDistribution = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+    };
+
+    const stats = await ReviewClinic.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: "$rate" },
+          ratingDistribution: {
+            $push: "$rate",
+          },
+        },
+      },
+    ]);
+
+    const ratingDistribution =
+      stats[0]?.ratingDistribution.reduce(
+        (acc, rate) => {
+          acc[rate] = (acc[rate] || 0) + 1;
+          return acc;
+        },
+        { ...defaultRatingDistribution }
+      ) || defaultRatingDistribution;
+
+    const currentPage = parseInt(page);
+    const totalPages = Math.ceil(total / parseInt(pageSize));
+    const hasMore = currentPage < totalPages;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        reviews,
+        pagination: {
+          page: currentPage,
+          pageSize: parseInt(pageSize),
+          totalPage: totalPages,
+          totalItems: total,
+        },
+        hasMore,
+        stats: {
+          averageRating: stats[0]?.averageRating || 0,
+          totalReviews: total,
+          ratingDistribution,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Get reviews error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi lấy danh sách đánh giá",
+      error: error.message
     });
   }
 };

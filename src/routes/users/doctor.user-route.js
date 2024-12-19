@@ -33,8 +33,8 @@ router.get("/:slug", getDoctorDetail);
 router.put("/:id", authMiddlewareDoctor, updateDoctor);
 router.get("/schedule-booking/:doctorId", getScheduleByDoctor);
 
-router.get("/reviews/by-customer/:doctor", getAllReviewByCustomer);
 router.post("/reviews", authMiddlewareUser, createReviewDoctor);
+router.get("/reviews/by-customer/:doctor", getAllReviewByCustomer);
 router.delete("/reviews/:id", authMiddlewareDoctor, removeReviewDoctor);
 router.get("/reviews/:doctor", authMiddlewareDoctor, getAllReviewByDoctor);
 

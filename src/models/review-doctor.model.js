@@ -15,7 +15,7 @@ const ReviewDoctorSchema = new mongoose.Schema(
     booking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
-      required: true,
+      default: null,
     },
     rate: {
       type: Number,
@@ -25,6 +25,10 @@ const ReviewDoctorSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    isActive:{
+      type: Boolean,
+      default:true
+    }
   },
   { timestamps: true }
 );

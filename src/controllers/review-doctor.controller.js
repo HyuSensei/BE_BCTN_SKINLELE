@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import Booking from "../models/booking.model.js";
 import ReviewDoctor from "../models/review-doctor.model.js";
 
@@ -96,33 +96,33 @@ export const getAllReviewByDoctor = async (req, res) => {
 export const createReviewDoctor = async (req, res) => {
   try {
     const user = req.user._id;
-    const { doctor, booking, rate, content } = req.body;
+    const { doctor, booking = null, rate, content } = req.body;
 
-    const existingReview = await ReviewDoctor.findOne({
-      user,
-      booking,
-    });
+    // const existingReview = await ReviewDoctor.findOne({
+    //   user,
+    //   booking,
+    // });
 
-    if (existingReview) {
-      return res.status(400).json({
-        success: false,
-        message: "Bạn đã đánh giá cho lịch khám này",
-      });
-    }
+    // if (existingReview) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Bạn đã đánh giá cho lịch khám này",
+    //   });
+    // }
 
-    const bookingExists = await Booking.findOne({
-      _id: booking,
-      user,
-      doctor,
-      status: "completed",
-    });
+    // const bookingExists = await Booking.findOne({
+    //   _id: booking,
+    //   user,
+    //   doctor,
+    //   status: "completed",
+    // });
 
-    if (!bookingExists) {
-      return res.status(400).json({
-        success: false,
-        message: "Không tìm thấy lịch khám hoặc lịch khám chưa hoàn thành",
-      });
-    }
+    // if (!bookingExists) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Không tìm thấy lịch khám hoặc lịch khám chưa hoàn thành",
+    //   });
+    // }
 
     const review = await ReviewDoctor.create({
       doctor,
@@ -182,12 +182,13 @@ export const removeReviewDoctor = async (req, res) => {
 
 export const getAllReviewByCustomer = async (req, res) => {
   try {
-    const { doctorId } = req.params;
+    const { doctor } = req.params;
+
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 10;
     const { rate } = req.query;
 
-    let filter = { doctor: doctorId };
+    let filter = { doctor:new Types.ObjectId(`${doctor}`), isActive:true };
     if (rate) {
       filter.rate = parseInt(rate);
     }
