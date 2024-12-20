@@ -6,23 +6,28 @@ const ReviewDoctorSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Doctor",
       required: true,
-      index: true, 
+      index: true,
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true, 
+      index: true,
     },
     booking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
       default: null,
-      index: true, 
+      index: true,
     },
     rate: {
       type: Number,
       required: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
     content: {
       type: String,
