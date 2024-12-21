@@ -5,33 +5,47 @@ import ReviewDoctor from "../models/review-doctor.model.js";
 export const getAllReviewByDoctor = async (req, res) => {
   try {
     const { page = 1, pageSize = 10, rate, search } = req.query;
-    const { doctor } = req.params;
+    const doctorId = req.user._id;
 
-    let filter = { doctor };
+    let filter = { doctor: doctorId };
+
     if (rate) {
       filter.rate = parseInt(rate);
     }
 
     if (search) {
-      filter.$or = [
-        { "user.name": { $regex: search, $options: "i" } },
-        { content: { $regex: search, $options: "i" } },
-      ];
+      const reviews = await ReviewDoctor.aggregate([
+        {
+          $lookup: {
+            from: "users",
+            localField: "user",
+            foreignField: "_id",
+            as: "userDetails",
+          },
+        },
+        {
+          $match: {
+            doctor: doctorId,
+            "userDetails.name": { $regex: search, $options: "i" },
+          },
+        },
+      ]);
+
+      const reviewIds = reviews.map((review) => review._id);
+      filter._id = { $in: reviewIds };
     }
 
     const [reviews, total, ratingStats] = await Promise.all([
       ReviewDoctor.find(filter)
-        .populate("user", "name avatar")
-        .populate("booking", "date")
+        .populate("user", "name email avatar")
         .sort({ createdAt: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize)
-        .lean(),
+        .skip((parseInt(page) - 1) * parseInt(pageSize))
+        .limit(parseInt(pageSize)),
       ReviewDoctor.countDocuments(filter),
       ReviewDoctor.aggregate([
         {
           $match: {
-            doctor: new mongoose.Types.ObjectId(`${doctor}`),
+            doctor: new mongoose.Types.ObjectId(`${doctorId}`),
           },
         },
         {
@@ -77,13 +91,12 @@ export const getAllReviewByDoctor = async (req, res) => {
         pagination: {
           page: parseInt(page),
           pageSize: parseInt(pageSize),
-          totalPage: Math.ceil(total / pageSize),
+          totalPage: Math.ceil(total / parseInt(pageSize)),
           totalItems: total,
         },
       },
     });
   } catch (error) {
-    console.log(error);
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy danh sách đánh giá",
@@ -150,11 +163,11 @@ export const createReviewDoctor = async (req, res) => {
 export const removeReviewDoctor = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = req.user._id;
+    const doctor = req.user._id;
 
-    const review = await ReviewDoctor.findOne({
+    const review = await ReviewDoctor.findOneAndDelete({
       _id: id,
-      user,
+      doctor,
     });
 
     if (!review) {
@@ -163,8 +176,6 @@ export const removeReviewDoctor = async (req, res) => {
         message: "Không tìm thấy đánh giá hoặc bạn không có quyền xóa",
       });
     }
-
-    await review.remove();
 
     return res.status(200).json({
       success: true,
@@ -188,7 +199,7 @@ export const getAllReviewByCustomer = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const { rate } = req.query;
 
-    let filter = { doctor:new Types.ObjectId(`${doctor}`), isActive:true };
+    let filter = { doctor: new Types.ObjectId(`${doctor}`), isActive: true };
     if (rate) {
       filter.rate = parseInt(rate);
     }
@@ -257,6 +268,74 @@ export const getAllReviewByCustomer = async (req, res) => {
       success: false,
       message: error.message,
       data: [],
+    });
+  }
+};
+
+export const updateReviewDoctor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rate, content, isActive } = req.body;
+    const doctor = req.user._id;
+
+    const review = await ReviewDoctor.findOne({
+      _id: id,
+      doctor,
+    });
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đánh giá hoặc bạn không có quyền chỉnh sửa",
+      });
+    }
+
+    if (rate) {
+      if (![1, 2, 3, 4, 5].includes(rate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Đánh giá phải từ 1 đến 5 sao",
+        });
+      }
+      review.rate = rate;
+    }
+
+    if (content) {
+      review.content = content.trim();
+    }
+
+    if (typeof isActive === "boolean") {
+      review.isActive = isActive;
+    }
+
+    const updatedReview = await review.save();
+
+    await updatedReview.populate([
+      {
+        path: "user",
+        select: "name avatar",
+      },
+      {
+        path: "doctor",
+        select: "name avatar",
+      },
+      {
+        path: "booking",
+        select: "date",
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật đánh giá thành công",
+      data: updatedReview,
+    });
+  } catch (error) {
+    console.error("Update review error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi cập nhật đánh giá",
+      error: error.message,
     });
   }
 };

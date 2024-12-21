@@ -10,11 +10,15 @@ import {
 import {
   getAllReviewClinic,
   removeReviewClinic,
+  updateReviewClinic,
 } from "../../controllers/review-clinic.controller.js";
 import { getAllBookingByAdmin } from "../../controllers/booking.controller.js";
 import { authMiddlewareAdmin } from "../../middleware/auth.middleware.js";
 import { accessRole, ADMIN_ROLE, CLINIC_ROLE } from "../../ultis/getRole.js";
-import { getClinicDetailedStats, getClinicOverviewStats } from "../../controllers/statistical.controller.js";
+import {
+  getClinicDetailedStats,
+  getClinicOverviewStats,
+} from "../../controllers/statistical.controller.js";
 
 const router = express.Router();
 
@@ -24,18 +28,18 @@ router.get(
   authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
   getCliniDetailByAdmin
 );
-router.put(
-  "/:id",
-  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
-  updateClinic
-);
 router.post(
   "/owner",
   authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
   updateClinicByOwner
 );
-router.delete("/:id", removeClinic);
 router.get("/", authMiddlewareAdmin(accessRole([ADMIN_ROLE])), getAllClinic);
+router.put(
+  "/:id",
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  updateClinic
+);
+router.delete("/:id", removeClinic);
 
 router.get(
   "/reviews",
@@ -46,6 +50,11 @@ router.delete(
   "/reviews/:id",
   authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
   removeReviewClinic
+);
+router.put(
+  "/reviews/:id",
+  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
+  updateReviewClinic
 );
 
 router.get(

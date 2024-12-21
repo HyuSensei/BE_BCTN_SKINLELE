@@ -11,6 +11,7 @@ import {
   getAllReviewByCustomer,
   getAllReviewByDoctor,
   removeReviewDoctor,
+  updateReviewDoctor,
 } from "../../controllers/review-doctor.controller.js";
 import {
   authMiddlewareDoctor,
@@ -28,12 +29,13 @@ const router = express.Router();
 
 router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
 router.get("/by-customer", getDoctorsByCustomer);
-router.get("/filter-options", getDoctorFilterOptions)
+router.get("/filter-options", getDoctorFilterOptions);
 router.get("/:slug", getDoctorDetail);
 router.put("/:id", authMiddlewareDoctor, updateDoctor);
 router.get("/schedule-booking/:doctorId", getScheduleByDoctor);
 
 router.post("/reviews", authMiddlewareUser, createReviewDoctor);
+router.put("/reviews/:id", authMiddlewareDoctor, updateReviewDoctor);
 router.get("/reviews/by-customer/:doctor", getAllReviewByCustomer);
 router.delete("/reviews/:id", authMiddlewareDoctor, removeReviewDoctor);
 router.get("/reviews/:doctor", authMiddlewareDoctor, getAllReviewByDoctor);
