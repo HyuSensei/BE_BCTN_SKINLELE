@@ -4,6 +4,8 @@ import {
   getAllBookingByCustomer,
   getAllBookingByDoctor,
   getBookingDetail,
+  getDoctorOrClinicSearch,
+  updateBookingInfo,
   updateStatusBooking,
 } from "../../controllers/booking.controller.js";
 import {
@@ -14,10 +16,12 @@ import {
 const router = express.Router();
 
 router.post("/", authMiddlewareUser, createBooking);
-router.put("/status/:id", authMiddlewareUser, updateStatusBooking);
-router.get("/detail-customer/:id", authMiddlewareUser, getBookingDetail);
-router.get("/detail-doctor/:id", authMiddlewareDoctor, getBookingDetail);
 router.get("/customer", authMiddlewareUser, getAllBookingByCustomer);
 router.get("/by-doctor", authMiddlewareDoctor, getAllBookingByDoctor);
+router.get("/search-doctor-or-clinic", getDoctorOrClinicSearch);
+router.put("/status/:id", authMiddlewareUser, updateStatusBooking);
+router.put("/customer-info/:id", authMiddlewareUser, updateBookingInfo);
+router.get("/detail-customer/:id", authMiddlewareUser, getBookingDetail);
+router.get("/detail-doctor/:id", authMiddlewareDoctor, getBookingDetail);
 
 export default router;

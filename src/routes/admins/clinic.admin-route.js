@@ -34,11 +34,7 @@ router.post(
   updateClinicByOwner
 );
 router.get("/", authMiddlewareAdmin(accessRole([ADMIN_ROLE])), getAllClinic);
-router.put(
-  "/:id",
-  authMiddlewareAdmin(accessRole([CLINIC_ROLE])),
-  updateClinic
-);
+router.put("/:id", authMiddlewareAdmin(accessRole([ADMIN_ROLE])), updateClinic);
 router.delete("/:id", removeClinic);
 
 router.get(

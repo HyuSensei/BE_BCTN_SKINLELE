@@ -815,3 +815,4 @@ export const getDoctorFilterOptions = async (req, res) => {
     });
   }
 };
+
