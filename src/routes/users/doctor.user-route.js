@@ -5,6 +5,7 @@ import {
   getDoctorFilterOptions,
   getScheduleByDoctor,
   updateDoctor,
+  getDoctorOrClinicSearch,
 } from "../../controllers/doctor.controller.js";
 import {
   createReviewDoctor,
@@ -30,6 +31,7 @@ const router = express.Router();
 router.get("/statistical", authMiddlewareDoctor, getStatisticalDoctor);
 router.get("/by-customer", getDoctorsByCustomer);
 router.get("/filter-options", getDoctorFilterOptions);
+router.get("/search-doctor-clinic", getDoctorOrClinicSearch);
 router.get("/:slug", getDoctorDetail);
 router.put("/:id", authMiddlewareDoctor, updateDoctor);
 router.get("/schedule-booking/:doctorId", getScheduleByDoctor);

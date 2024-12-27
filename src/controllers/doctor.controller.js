@@ -816,3 +816,101 @@ export const getDoctorFilterOptions = async (req, res) => {
   }
 };
 
+export const getDoctorOrClinicSearch = async (req, res) => {
+  try {
+    const { search, page = 1, pageSize = 10 } = req.query;
+    const skip = (page - 1) * pageSize;
+
+    const [doctors, clinics, totalDoctors, totalClinics] = await Promise.all([
+      Doctor.find({
+        $and: [
+          { isActive: true },
+          {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { specialty: { $regex: search, $options: "i" } },
+              { about: { $regex: search, $options: "i" } },
+            ],
+          },
+        ],
+      })
+        .select("name specialty avatar slug")
+        .skip(skip)
+        .limit(parseInt(pageSize)),
+
+      Clinic.find({
+        $and: [
+          { isActive: true },
+          {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { address: { $regex: search, $options: "i" } },
+              { specialties: { $regex: search, $options: "i" } },
+            ],
+          },
+        ],
+      })
+        .select("name address logo slug specialties")
+        .skip(skip)
+        .limit(parseInt(pageSize)),
+
+      Doctor.countDocuments({
+        $and: [
+          { isActive: true },
+          {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { specialty: { $regex: search, $options: "i" } },
+              { about: { $regex: search, $options: "i" } },
+            ],
+          },
+        ],
+      }),
+
+      Clinic.countDocuments({
+        $and: [
+          { isActive: true },
+          {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { address: { $regex: search, $options: "i" } },
+              { specialties: { $regex: search, $options: "i" } },
+            ],
+          },
+        ],
+      }),
+    ]);
+
+    const results = [
+      ...doctors.map((doc) => ({
+        ...doc.toObject(),
+        type: "doctor",
+      })),
+      ...clinics.map((clinic) => ({
+        ...clinic.toObject(),
+        type: "clinic",
+      })),
+    ];
+
+    const total = totalDoctors + totalClinics;
+    const currentPage = parseInt(page);
+    const hasMore = currentPage * pageSize < total;
+
+    return res.status(200).json({
+      success: true,
+      data: results,
+      pagination: {
+        page: currentPage,
+        pageSize: parseInt(pageSize),
+        total,
+        hasMore,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi khi tìm kiếm",
+      error: error.message,
+    });
+  }
+};
