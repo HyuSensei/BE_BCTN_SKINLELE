@@ -110,6 +110,7 @@ export const createPromotion = async (req, res) => {
         product: item.product,
         discountPercentage: item.discountPercentage,
         maxQty: item.maxQty,
+        maxDiscountAmount: item.maxDiscountAmount,
       })),
     });
 
@@ -174,6 +175,8 @@ export const updatePromotion = async (req, res) => {
           discountPercentage: p.discountPercentage,
           maxQty: p.maxQty,
           usedQty: p?.usedQty || existingProduct?.usedQty || 0,
+          maxDiscountAmount:
+            p?.maxDiscountAmount || existingProduct?.maxDiscountAmount || 0,
         };
       });
     }

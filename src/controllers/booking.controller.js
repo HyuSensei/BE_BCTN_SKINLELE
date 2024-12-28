@@ -2,6 +2,7 @@ import { convertToVietnameseDay } from "../helpers/convert.js";
 import Booking from "../models/booking.model.js";
 import Clinic from "../models/clinic.model.js";
 import Doctor from "../models/doctor.model.js";
+import ReviewDoctor from "../models/review-doctor.model.js";
 import moment from "moment";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
@@ -448,33 +449,56 @@ export const getAllBookingByCustomer = async (req, res) => {
     }
 
     // Get bookings with pagination
-    const [bookings, total, statusCounts] = await Promise.all([
-      Booking.find(filter)
-        .populate("doctor", "name email phone avatar specialty")
-        .populate("clinic", "name logo address")
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * pageSize)
-        .limit(pageSize),
-      Booking.countDocuments(filter),
-      // Aggregate to count bookings by status
-      Booking.aggregate([
-        { $match: { user: userId } },
-        {
-          $group: {
-            _id: "$status",
-            count: { $sum: 1 },
-          },
-        },
-      ]),
-    ]);
+    // const [bookings, total, statusCounts] = await Promise.all([
+    //   Booking.find(filter)
+    //     .populate("doctor", "name email phone avatar specialty")
+    //     .populate("clinic", "name logo address")
+    //     .sort({ createdAt: -1 })
+    //     .skip((page - 1) * pageSize)
+    //     .limit(pageSize),
+    //   Booking.countDocuments(filter),
+    //   Booking.aggregate([
+    //     { $match: { user: userId } },
+    //     {
+    //       $group: {
+    //         _id: "$status",
+    //         count: { $sum: 1 },
+    //       },
+    //     },
+    //   ]),
+    // ]);
 
-    // Calculate pagination stats
+    const [bookings, total, statusCounts, reviewedBookings] = await Promise.all(
+      [
+        Booking.find(filter)
+          .populate("doctor", "name email phone avatar specialty")
+          .populate("clinic", "name logo address")
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * pageSize)
+          .limit(pageSize),
+        Booking.countDocuments(filter),
+        Booking.aggregate([
+          { $match: { user: userId } },
+          {
+            $group: {
+              _id: "$status",
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        ReviewDoctor.find({ user: userId }).distinct("booking"),
+      ]
+    );
+    const bookingsWithReviewStatus = bookings.map((booking) => ({
+      ...booking.toObject(),
+      isReview: reviewedBookings.some((id) => id?.equals(booking._id)),
+    }));
+
     const currentPage = parseInt(page);
     const currentPageSize = parseInt(pageSize);
     const totalPages = Math.ceil(total / currentPageSize);
     const hasMore = currentPage < totalPages;
 
-    // Convert status counts array to object
     const statusCountsObject = {
       pending: 0,
       confirmed: 0,
@@ -489,7 +513,7 @@ export const getAllBookingByCustomer = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        bookings,
+        bookings: bookingsWithReviewStatus,
         pagination: {
           page: currentPage,
           pageSize: currentPageSize,

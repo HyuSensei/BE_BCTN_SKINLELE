@@ -15,6 +15,7 @@ import { googleCallback } from "./controllers/auth.controller.js";
 import { handleWebhookOrder } from "./controllers/order.controller.js";
 import "./jobs/expired.js";
 import "./jobs/opt.js";
+import "./jobs/doctor-match.js";
 import { app, server } from "./websocket/index.js";
 
 dotenv.config();

@@ -1,10 +1,19 @@
 import mongoose from "mongoose";
+import slugify from "slugify";
 
 const PromotionSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: true,
+    },
+    banner: {
+      url: {
+        type: String,
+      },
+      publicId: {
+        type: String,
+      },
     },
     description: {
       type: String,
@@ -41,11 +50,25 @@ const PromotionSchema = new mongoose.Schema(
           type: Number,
           default: 0,
         },
+        maxDiscountAmount: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
+    slug: {
+      type: String,
+      lowercase: true,
+      unique: true,
+    },
   },
   { timestamps: true }
 );
+
+PromotionSchema.pre("save", function (next) {
+  this.slug = slugify(this.name, { lower: true, locale: "vi" });
+  next();
+});
 
 const Promotion = mongoose.model("Promotion", PromotionSchema);
 

@@ -6,7 +6,9 @@ import ReviewDoctor from "../models/review-doctor.model.js";
 import Schedule from "../models/schedule.model.js";
 import moment from "moment";
 import { formatPrice } from "../ultis/formatPrice.js";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
+import DoctorMatch from "../models/doctor-match.model.js";
+
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const createDoctor = async (req, res) => {
@@ -911,6 +913,139 @@ export const getDoctorOrClinicSearch = async (req, res) => {
       success: false,
       message: "Lỗi khi tìm kiếm",
       error: error.message,
+    });
+  }
+};
+
+export const getDoctorRecommend = async (req, res) => {
+  try {
+    const { pageSize = 5, categories, page = 1 } = req.query;
+
+    if (!categories) {
+      return res.status(400).json({
+        success: false,
+        data: [],
+      });
+    }
+
+    const categoryObjectIds = categories.split(",").map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id.trim())) {
+        throw new Error(`Category ID không hợp lệ: ${id}`);
+      }
+      return new mongoose.Types.ObjectId(`${id.trim()}`);
+    });
+
+    const skip = (parseInt(page) - 1) * parseInt(pageSize);
+
+    const [doctors, total] = await Promise.all([
+      DoctorMatch.aggregate([
+        {
+          $match: {
+            category: { $in: categoryObjectIds },
+            score: { $gt: 0 },
+          },
+        },
+        {
+          $group: {
+            _id: "$doctor",
+            avgScore: { $avg: "$score" },
+            maxScore: { $max: "$score" },
+            matchCount: { $sum: 1 },
+          },
+        },
+        {
+          $match: {
+            matchCount: { $gte: Math.ceil(categoryObjectIds.length * 0.5) },
+          },
+        },
+        {
+          $sort: { avgScore: -1 },
+        },
+        {
+          $skip: skip,
+        },
+        {
+          $limit: parseInt(pageSize),
+        },
+        {
+          $lookup: {
+            from: "doctors",
+            localField: "_id",
+            foreignField: "_id",
+            pipeline: [
+              {
+                $project: {
+                  name: 1,
+                  specialty: 1,
+                  avatar: 1,
+                  experience: 1,
+                  slug: 1,
+                },
+              },
+            ],
+            as: "doctorDetails",
+          },
+        },
+        {
+          $unwind: "$doctorDetails",
+        },
+        {
+          $project: {
+            doctorId: "$_id",
+            name: "$doctorDetails.name",
+            specialty: "$doctorDetails.specialty",
+            avatar: "$doctorDetails.avatar",
+            experience: "$doctorDetails.experience",
+            slug: "$doctorDetails.slug",
+            avgScore: { $round: ["$avgScore", 2] },
+            maxScore: { $round: ["$maxScore", 2] },
+          },
+        },
+      ]),
+      DoctorMatch.aggregate([
+        {
+          $match: {
+            category: { $in: categoryObjectIds },
+            score: { $gt: 0 },
+          },
+        },
+        {
+          $group: {
+            _id: "$doctor",
+            matchCount: { $sum: 1 },
+          },
+        },
+        {
+          $match: {
+            matchCount: { $gte: Math.ceil(categoryObjectIds.length * 0.5) },
+          },
+        },
+        {
+          $count: "total",
+        },
+      ]),
+    ]);
+
+    const totalDoctors = total[0]?.total || 0;
+
+    return res.json({
+      success: true,
+      data: {
+        doctors,
+        pagination: {
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalItems: totalDoctors,
+          totalPage: Math.ceil(totalDoctors / parseInt(pageSize)),
+        },
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      data: [],
     });
   }
 };
