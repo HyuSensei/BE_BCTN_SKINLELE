@@ -8,7 +8,7 @@ import {
   getListFromBrand,
   getAllProductByUser,
   getProductPromotion,
-} from "../../controllers/product.controller.js";
+} from "../../controllers/product-base.controller.js";
 
 const router = express.Router();
 

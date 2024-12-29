@@ -1,5 +1,5 @@
 import slugify from "slugify";
-import { buildCategoryTree } from "../helpers/buildCategoryTree.js";
+import { buildCategoryTree } from "../helpers/category.helper.js";
 import Category from "../models/category.model.js";
 
 export const getAllCategory = async (req, res) => {

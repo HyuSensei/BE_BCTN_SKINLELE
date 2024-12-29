@@ -487,6 +487,8 @@ export const getDoctorsByCustomer = async (req, res) => {
           _id: "$clinicDetails._id",
           name: "$clinicDetails.name",
           address: "$clinicDetails.address",
+          logo: "$clinicDetails.logo",
+          slug: "$clinicDetails.slug",
         },
       },
     });
