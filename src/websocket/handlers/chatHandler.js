@@ -27,16 +27,17 @@ export const handleChatEvents = (io, socket) => {
     const payload = JSON.parse(data);
     const { sender, receiver } = payload;
     const message = await createMessage(payload);
+    const messages = await getMessages(message.conversation);
 
     const receiverSockets = getAllSocketsForUser(receiver._id);
     const senderSockets = getAllSocketsForUser(sender._id);
 
     receiverSockets.forEach((socketId) => {
-      io.to(socketId).emit("resNewMessage", message);
+      io.to(socketId).emit("resGetMessages", messages);
     });
 
     senderSockets.forEach((socketId) => {
-      io.to(socketId).emit("resNewMessage", message);
+      io.to(socketId).emit("resGetMessages", messages);
     });
   });
 
