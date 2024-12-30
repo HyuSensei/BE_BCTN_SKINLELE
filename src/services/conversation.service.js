@@ -1,5 +1,6 @@
 import Admin from "../models/admin.model.js";
 import Conversation from "../models/conversation.model.js";
+import User from "../models/user.model.js";
 
 const pickFields = (obj, fields) => {
   return fields.reduce((result, field) => {
@@ -112,16 +113,47 @@ export const getAllSupportConversation = async (userId) => {
   }
 };
 
-export const getAllConversation = async (userId) => {
+export const getAllCustomerConversation = async (adminId) => {
   try {
-    const conversations = await Conversation.find({
-      $or: [{ "sender._id": userId }, { "receiver._id": userId }],
-    })
-      .sort({ updatedAt: -1 })
-      .populate("lastMessage");
-    return conversations;
+    const customers = await User.find({ isActive: true }).select(
+      "-password -__v"
+    );
+    if (!customers.length) {
+      return [];
+    }
+
+    const conversations = await Promise.all(
+      customers.map(async (customer) => {
+        return await Conversation.findOne({
+          $or: [
+            { "sender._id": customer._id, "receiver._id": adminId },
+            { "receiver._id": customer._id, "sender._id": adminId },
+          ],
+        })
+          .populate("sender._id")
+          .populate("receiver._id")
+          .populate("lastMessage");
+      })
+    );
+    const validConversations = conversations.filter((conv) => conv);
+    const formattedConversationsList =
+      formattedConversations(validConversations);
+
+    const result = customers.map((customer) => {
+      const customerConversation = formattedConversationsList.find(
+        (conv) =>
+          String(conv.sender._id) === String(customer._id) ||
+          String(conv.receiver._id) === String(customer._id)
+      );
+      return {
+        customer,
+        conversation: customerConversation || null,
+      };
+    });
+
+    return result;
   } catch (error) {
-    console.log("Error get conversation: ", error);
+    console.log("Error all customer conversation: ", error);
     return [];
   }
 };

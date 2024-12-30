@@ -41,7 +41,7 @@ const MessageSchema = new mongoose.Schema(
         publicId: String,
         type: {
           type: String,
-          enum: ["image", "video"],
+          enum: ["image", "video", "audio"],
           default: "image",
         },
       },
