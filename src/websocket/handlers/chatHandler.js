@@ -62,10 +62,10 @@ export const handleChatEvents = (io, socket) => {
 
     if (senderSockets && receiverSockets) {
       receiverSockets.forEach((socketId) => {
-        this.server.to(socketId).emit("resMessages", messages);
+        io.to(socketId).emit("resMessages", messages);
       });
       senderSockets.forEach((socketId) => {
-        this.server.to(socketId).emit("resMessages", messages);
+        io.to(socketId).emit("resMessages", messages);
       });
     }
   });
@@ -75,7 +75,7 @@ export const handleChatEvents = (io, socket) => {
     const sender = getUserBySocketId(socket.id);
     if (!sender) return;
 
-    const receiverSockets = this.getAllSocketsForUser(payloadReceiver._id);
+    const receiverSockets = getAllSocketsForUser(payloadReceiver._id);
     receiverSockets.forEach((socketId) => {
       io.to(socketId).emit("resTyping", {
         sender,
@@ -89,7 +89,7 @@ export const handleChatEvents = (io, socket) => {
     const sender = getUserBySocketId(socket.id);
     if (!sender) return;
 
-    const receiverSockets = this.getAllSocketsForUser(payloadReceiver._id);
+    const receiverSockets = getAllSocketsForUser(payloadReceiver._id);
     receiverSockets.forEach((socketId) => {
       io.to(socketId).emit("resTyping", {
         sender,
