@@ -18,6 +18,7 @@ const ClinicSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
       required: true,
+      unique: true,
     },
     specialties: [String],
     name: {

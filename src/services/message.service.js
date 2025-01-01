@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 
@@ -75,8 +76,14 @@ export const createMessage = async ({
     if (!conversation) {
       conversation = new Conversation({
         type,
-        sender,
-        receiver,
+        sender: {
+          ...sender,
+          _id: new Types.ObjectId(`${sender._id}`),
+        },
+        receiver: {
+          ...receiver,
+          _id: new Types.ObjectId(`${receiver._id}`),
+        },
         messages: [],
       });
     }

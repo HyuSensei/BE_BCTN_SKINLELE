@@ -158,9 +158,22 @@ export const getAllCustomerConversation = async (adminId) => {
   }
 };
 
-export const getConversation = async (conversationId) => {
+export const getConversation = async (payload) => {
   try {
-    return await Conversation.findById(conversationId).populate("lastMessage");
+    const conversation = await Conversation.findOne({
+      $or: [
+        {
+          "sender._id": payload[0],
+          "receiver._id": payload[1],
+        },
+        {
+          "sender._id": payload[1],
+          "receiver._id": payload[0],
+        },
+      ],
+      isActive: true,
+    }).populate("lastMessage");
+    return conversation || null;
   } catch (error) {
     console.log("Error get conversation: ", error);
   }

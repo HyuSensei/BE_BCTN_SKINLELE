@@ -24,8 +24,9 @@ export const handleChatEvents = (io, socket) => {
     socket.emit("resGetAllSupport", conversations);
   });
 
-  socket.on("getConversation", async (conversationId) => {
-    const conversation = await getConversation(conversationId);
+  socket.on("getConversation", async (data) => {
+    const payload = JSON.parse(data);
+    const conversation = await getConversation(payload);
     socket.emit("resConversation", conversation);
   });
 
