@@ -1,5 +1,6 @@
 import Admin from "../models/admin.model.js";
 import Conversation from "../models/conversation.model.js";
+import Doctor from "../models/doctor.model.js";
 import User from "../models/user.model.js";
 
 const pickFields = (obj, fields) => {
@@ -156,6 +157,47 @@ export const getAllCustomerConversation = async (adminId) => {
     console.log("Error all customer conversation: ", error);
     return [];
   }
+};
+
+export const getAllDoctorConversation = async (userId) => {
+  const doctors = await Doctor.find({ isActive: true }).select(
+    "-password -__v"
+  );
+
+  if (!doctors.length) {
+    return [];
+  }
+
+  const conversations = await Promise.all(
+    doctors.map(async (doctor) => {
+      return await Conversation.findOne({
+        $or: [
+          { "sender._id": doctor._id, "receiver._id": userId },
+          { "receiver._id": doctor._id, "sender._id": userId },
+        ],
+      })
+        .populate("sender._id")
+        .populate("receiver._id")
+        .populate("lastMessage");
+    })
+  );
+
+  const validConversations = conversations.filter((conv) => conv);
+  const formattedConversationsList = formattedConversations(validConversations);
+
+  const result = doctors.map((doctor) => {
+    const doctorsConversation = formattedConversationsList.find(
+      (conv) =>
+        String(conv.sender._id) === String(doctor._id) ||
+        String(conv.receiver._id) === String(doctor._id)
+    );
+    return {
+      doctor,
+      conversation: doctorsConversation || null,
+    };
+  });
+
+  return result;
 };
 
 export const getConversation = async (payload) => {

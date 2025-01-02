@@ -1,5 +1,6 @@
 import {
   getAllCustomerConversation,
+  getAllDoctorConversation,
   getAllSupportConversation,
   getConversation,
 } from "../../services/conversation.service.js";
@@ -14,6 +15,11 @@ import {
 } from "../connectionManager.js";
 
 export const handleChatEvents = (io, socket) => {
+  socket.on("getAllDoctor", async (userId) => {
+    const conversations = await getAllDoctorConversation(userId);
+    socket.emit("resGetAllDoctor", conversations);
+  });
+
   socket.on("getAllCustomer", async (adminId) => {
     const conversations = await getAllCustomerConversation(adminId);
     socket.emit("resGetAllCustomer", conversations);
