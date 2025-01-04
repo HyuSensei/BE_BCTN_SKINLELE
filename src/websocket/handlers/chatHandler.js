@@ -64,8 +64,8 @@ export const handleChatEvents = (io, socket) => {
     const { sender, receiver, conversationId } = payload;
     const messages = await updateSeenMessage(conversationId);
 
-    const receiverSockets = getAllSocketsForUser(receiver._id);
-    const senderSockets = getAllSocketsForUser(sender._id);
+    const receiverSockets = getAllSocketsForUser(receiver);
+    const senderSockets = getAllSocketsForUser(sender);
 
     if (senderSockets && receiverSockets) {
       receiverSockets.forEach((socketId) => {

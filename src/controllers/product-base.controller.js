@@ -9,6 +9,7 @@ import {
   getPromotionFieldsStage,
   getPromotionProjectStage,
   calculateFinalPrice,
+  calulateFinalPricePipeline,
 } from "../helpers/promotion.helper.js";
 
 import {
@@ -16,14 +17,34 @@ import {
   getReviewFieldsStage,
 } from "../helpers/review.helper.js";
 
-import {
-  getCategoryLookupStage,
-  getCategoryProjectStage,
-  parseCategoryIds,
-  buildCategoryMatchStage,
-  getSubcategoriesAnalysisStage,
-} from "../helpers/category.helper.js";
+import { getCategoryProjectStage } from "../helpers/category.helper.js";
 import { getFullProjectStage } from "../helpers/product.projection.helper.js";
+import Review from "../models/review.model.js";
+
+const projectFileds = {
+  $project: {
+    ...getPromotionProjectStage().$project,
+    name: 1,
+    slug: 1,
+    price: 1,
+    mainImage: 1,
+    finalPrice: 1,
+    brand: {
+      _id: "$brandInfo._id",
+      name: "$brandInfo.name",
+      slug: "$brandInfo.slug",
+    },
+    categories: {
+      $map: {
+        input: "$categories",
+        as: "cat",
+        in: { _id: "$$cat._id", name: "$$cat.name", slug: "$$cat.slug" },
+      },
+    },
+    totalReviews: 1,
+    averageRating: 1,
+  },
+};
 
 const getTagTitle = (tag) => {
   switch (tag) {
@@ -42,199 +63,38 @@ const getTagTitle = (tag) => {
   }
 };
 
-export const createProduct = async (req, res) => {
-  try {
-    const {
-      name,
-      categories,
-      brand,
-      images,
-      price,
-      description,
-      mainImage,
-      variants,
-      tags,
-      enable,
-      capacity,
-      expiry,
-    } = req.body;
-
-    const existingProduct = await Product.findOne({ name }).lean();
-    if (existingProduct) {
-      return res.status(400).json({
-        success: false,
-        message: "Tên sản phẩm đã tồn tại",
-      });
-    }
-
-    const newProduct = new Product({
-      name,
-      categories,
-      brand,
-      images,
-      price,
-      description,
-      mainImage,
-      variants,
-      tags,
-      enable,
-      expiry: new Date(expiry),
-      capacity,
-    });
-
-    const savedProduct = await newProduct.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Tạo mới sản phẩm thành công",
-      data: savedProduct,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: "Có lỗi xảy ra khi thêm sản phẩm",
-      error: error.message,
-    });
-  }
-};
-
-export const updateProduct = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const {
-      name,
-      categories,
-      brand,
-      images,
-      price,
-      description,
-      mainImage,
-      variants,
-      tags,
-      expiry,
-      enable,
-    } = req.body;
-    const updateData = {
-      name,
-      categories,
-      brand,
-      images,
-      price,
-      description,
-      mainImage,
-      variants,
-      tags,
-      expiry: new Date(expiry),
-      enable,
-    };
-
-    Object.keys(updateData).forEach(
-      (key) => updateData[key] === (undefined || "") && delete updateData[key]
-    );
-
-    if (name) {
-      const newSlug = slugify(name, { lower: true, locale: "vi" });
-      updateData.slug = newSlug;
-    }
-
-    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!updatedProduct) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy sản phẩm",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Cập nhật sản phẩm thành công",
-      data: updatedProduct,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: "Có lỗi xảy ra khi cập nhật sản phẩm",
-      error: error.message,
-    });
-  }
-};
-
-export const removeProduct = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedProduct = await Product.findByIdAndDelete(id);
-
-    if (!deletedProduct) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy sản phẩm",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Xóa sản phẩm thành công",
-      data: deletedProduct,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: "Có lỗi xảy ra khi xóa sản phẩm",
-      error: error.message,
-    });
-  }
-};
-
-export const getPriceFilter = (priceRanges) => {
-  let priceFilters = [];
-  if (priceRanges.length > 0) {
-    const min = Math.floor(priceRanges[0].minPrice / 1000) * 1000;
-    const max = Math.ceil(priceRanges[0].maxPrice / 1000) * 1000;
-    const range = max - min;
-
-    let numRanges;
-    if (range <= 100000) {
-      numRanges = 1;
-    } else if (range <= 500000) {
-      numRanges = 2;
-    } else if (range <= 1000000) {
-      numRanges = 3;
-    } else if (range <= 5000000) {
-      numRanges = 4;
-    } else {
-      numRanges = 5;
-    }
-
-    const step = Math.ceil(range / numRanges / 10000) * 10000;
-
-    for (let i = min; i < max; i += step) {
-      priceFilters.push({
-        min: i,
-        max: Math.min(i + step, max),
-      });
-    }
-  }
-  return priceFilters;
-};
+const brandAndCategoryInfo = [
+  {
+    $lookup: {
+      from: "brands",
+      localField: "brand",
+      foreignField: "_id",
+      as: "brandInfo",
+    },
+  },
+  { $unwind: "$brandInfo" },
+  {
+    $lookup: {
+      from: "categories",
+      localField: "categories",
+      foreignField: "_id",
+      as: "categories",
+    },
+  },
+];
 
 export const getListFromCategory = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
+    const pageSize = parseInt(req.query.pageSize) || 12;
     const { slug } = req.params;
     const {
       priceRange,
       brands,
-      sortOrder = "asc",
+      rating,
+      categories,
       tags,
-      subcategoriesList,
+      sortOrder = "asc",
     } = req.query;
 
     // Find category
@@ -247,21 +107,22 @@ export const getListFromCategory = async (req, res) => {
       });
     }
 
-    // Build category match stage
-    const categoryIds = subcategoriesList
-      ? parseCategoryIds(subcategoriesList)
-      : [category._id];
-
     const matchStage = {
-      ...buildCategoryMatchStage(categoryIds),
+      categories: { $in: [category._id] },
       enable: true,
     };
 
-    // Add other filters
+    if (categories) {
+      const categoryIds = categories
+        .split(",")
+        .map((id) => new mongoose.Types.ObjectId(`${id}`));
+      matchStage.categories = { $in: categoryIds };
+    }
+
     if (brands) {
-      const brandIds = await Brand.find({
-        slug: { $in: brands.split(",") },
-      }).distinct("_id");
+      const brandIds = brands
+        .split(",")
+        .map((id) => new mongoose.Types.ObjectId(`${id}`));
       matchStage.brand = { $in: brandIds };
     }
 
@@ -269,22 +130,24 @@ export const getListFromCategory = async (req, res) => {
       matchStage.tags = { $in: tags.split(",") };
     }
 
-    // Build sort stage
-    const sortStage = {
-      finalPrice: sortOrder === "asc" ? 1 : -1,
-    };
-
     const currentDate = new Date();
 
     const aggregationPipeline = [
-      // Initial match
       { $match: matchStage },
-
-      // Promotion stages
       getPromotionLookupStage(currentDate),
       getPromotionFieldsStage(),
 
-      // Price filter after promotion calculation
+      {
+        ...calulateFinalPricePipeline,
+      },
+
+      {
+        $addFields: {
+          finalPrice: { $round: ["$finalPrice", 0] },
+        },
+      },
+
+      // Price filter
       ...(priceRange
         ? [
             {
@@ -298,109 +161,65 @@ export const getListFromCategory = async (req, res) => {
           ]
         : []),
 
-      // Review stages
+      // Rating filter
+      ...(rating
+        ? [
+            {
+              $lookup: {
+                from: "reviews",
+                localField: "_id",
+                foreignField: "product",
+                as: "reviews",
+              },
+            },
+            {
+              $match: {
+                "reviews.rate": Number(rating),
+              },
+            },
+          ]
+        : []),
+
+      // Get review stats
       getReviewLookupStage("reviews"),
       getReviewFieldsStage(),
 
-      // Category & brand stages
-      getCategoryLookupStage(),
-      {
-        $lookup: {
-          from: "brands",
-          localField: "brand",
-          foreignField: "_id",
-          as: "brandInfo",
-        },
-      },
-      { $unwind: "$brandInfo" },
+      // Get brand & category info
+      ...brandAndCategoryInfo,
 
-      // Final project
+      // Project fields
       {
-        $project: {
-          ...getPromotionProjectStage().$project,
-          ...getCategoryProjectStage(),
-          brand: {
-            _id: "$brandInfo._id",
-            name: "$brandInfo.name",
-            slug: "$brandInfo.slug",
-          },
-          totalReviews: 1,
-          averageRating: 1,
-          ratingDistribution: 1,
-        },
+        ...projectFileds,
       },
 
-      // Sort
-      { $sort: sortStage },
+      { $sort: { finalPrice: sortOrder === "asc" ? 1 : -1 } },
 
-      // Facet for pagination and metadata
+      // Pagination
       {
         $facet: {
           metadata: [{ $count: "total" }],
           data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
-          ...getSubcategoriesAnalysisStage().$facet,
-          allBrands: [
-            {
-              $group: {
-                _id: "$brand._id",
-                name: { $first: "$brand.name" },
-                slug: { $first: "$brand.slug" },
-                productCount: { $sum: 1 },
-              },
-            },
-            { $sort: { productCount: -1 } },
-          ],
-          priceRanges: [
-            {
-              $group: {
-                _id: null,
-                minPrice: { $min: "$finalPrice" },
-                maxPrice: { $max: "$finalPrice" },
-              },
-            },
-          ],
         },
       },
     ];
 
     const [result] = await Product.aggregate(aggregationPipeline);
 
-    const total = result.metadata[0]?.total || 0;
-    const products = result.data;
-    const subcategories = result.subcategories;
-    const allBrands = result.allBrands;
-    const priceStats = result.priceRanges[0] || { minPrice: 0, maxPrice: 0 };
-
-    // Build filters
-    const filters = {
-      priceRanges: getPriceFilter([
-        {
-          minPrice: priceStats.minPrice,
-          maxPrice: priceStats.maxPrice,
-        },
-      ]),
-      brands: allBrands,
-      categories: subcategories,
-      tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
-    };
-
     return res.status(200).json({
       success: true,
-      pagination: {
-        page,
-        totalPage: Math.ceil(total / pageSize),
-        totalItems: total,
-        pageSize,
+      data: {
+        category: category.name,
+        products: result.data.map((p) => ({
+          ...p,
+          finalPrice: calculateFinalPrice(p),
+        })),
+        pagination: {
+          page,
+          totalPage: Math.ceil((result.metadata[0]?.total || 0) / pageSize),
+          totalItems: result.metadata[0]?.total || 0,
+          pageSize,
+        },
       },
-      category: category.name,
-      data:
-        products && products.length > 0
-          ? products.map((p) => ({
-              ...p,
-              finalPrice: calculateFinalPrice(p),
-            }))
-          : [],
-      filters,
     });
   } catch (error) {
     console.log(error);
@@ -416,27 +235,35 @@ export const getListFromCategory = async (req, res) => {
 export const getListFromBrand = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
+    const pageSize = parseInt(req.query.pageSize) || 12;
     const { slug } = req.params;
-    const { priceRange, sortOrder = "asc", tags, categoriesList } = req.query;
+    const {
+      priceRange,
+      rating,
+      categories,
+      tags,
+      sortOrder = "asc",
+    } = req.query;
 
     // Find brand
     const brand = await Brand.findOne({ slug });
     if (!brand) {
       return res.status(404).json({
         success: false,
-        message: "Thương hiệu sản phẩm không tồn tại",
+        message: "Thương hiệu không tồn tại",
         data: [],
       });
     }
 
-    // Build match stage
-    let matchStage = { brand: brand._id, enable: true };
+    const matchStage = {
+      brand: brand._id,
+      enable: true,
+    };
 
-    if (categoriesList) {
-      const categoryIds = categoriesList
+    if (categories) {
+      const categoryIds = categories
         .split(",")
-        .map((id) => new mongoose.Types.ObjectId(id));
+        .map((id) => new mongoose.Types.ObjectId(`${id}`));
       matchStage.categories = { $in: categoryIds };
     }
 
@@ -444,25 +271,26 @@ export const getListFromBrand = async (req, res) => {
       matchStage.tags = { $in: tags.split(",") };
     }
 
-    // Build sort stage
-    let sortStage = {};
-    if (sortOrder === "asc") {
-      sortStage = { finalPrice: 1 };
-    } else if (sortOrder === "desc") {
-      sortStage = { finalPrice: -1 };
-    }
-
     const currentDate = new Date();
 
     const aggregationPipeline = [
-      // Initial match
       { $match: matchStage },
 
       // Lookup promotions
       getPromotionLookupStage(currentDate),
       getPromotionFieldsStage(),
 
-      // Price range filter (after calculating finalPrice)
+      {
+        ...calulateFinalPricePipeline,
+      },
+
+      {
+        $addFields: {
+          finalPrice: { $round: ["$finalPrice", 0] },
+        },
+      },
+
+      // Price filter
       ...(priceRange
         ? [
             {
@@ -476,111 +304,65 @@ export const getListFromBrand = async (req, res) => {
           ]
         : []),
 
-      // Lookup reviews
+      // Rating filter
+      ...(rating
+        ? [
+            {
+              $lookup: {
+                from: "reviews",
+                localField: "_id",
+                foreignField: "product",
+                as: "reviews",
+              },
+            },
+            {
+              $match: {
+                "reviews.rate": Number(rating),
+              },
+            },
+          ]
+        : []),
+
+      // Get review stats
       getReviewLookupStage("reviews"),
       getReviewFieldsStage(),
 
-      // Lookup relations
+      // Get brand & category info
+      ...brandAndCategoryInfo,
+
+      // Project fields
       {
-        $lookup: {
-          from: "categories",
-          localField: "categories",
-          foreignField: "_id",
-          as: "categoriesInfo",
-        },
+        ...projectFileds,
       },
 
-      // Final project
-      {
-        $project: {
-          ...getPromotionProjectStage().$project,
-          categories: {
-            $map: {
-              input: "$categoriesInfo",
-              as: "cat",
-              in: {
-                _id: "$$cat._id",
-                name: "$$cat.name",
-                slug: "$$cat.slug",
-              },
-            },
-          },
-          totalReviews: 1,
-          averageRating: 1,
-          ratingDistribution: 1,
-        },
-      },
+      { $sort: { finalPrice: sortOrder === "asc" ? 1 : -1 } },
 
-      // Sort
-      { $sort: sortStage },
-
-      // Facet for pagination and metadata
+      // Pagination
       {
         $facet: {
           metadata: [{ $count: "total" }],
           data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
-          priceRanges: [
-            {
-              $group: {
-                _id: null,
-                minPrice: { $min: "$finalPrice" },
-                maxPrice: { $max: "$finalPrice" },
-              },
-            },
-          ],
-          relatedCategories: [
-            { $unwind: "$categories" },
-            {
-              $group: {
-                _id: "$categories._id",
-                name: { $first: "$categories.name" },
-                slug: { $first: "$categories.slug" },
-              },
-            },
-          ],
         },
       },
     ];
 
     const [result] = await Product.aggregate(aggregationPipeline);
 
-    const total = result.metadata[0]?.total || 0;
-    const products = result.data;
-    const priceStats = result.priceRanges[0] || { minPrice: 0, maxPrice: 0 };
-    const relatedCategories = result.relatedCategories;
-
-    // Build price filter ranges
-    const priceFilters = getPriceFilter([
-      {
-        minPrice: priceStats.minPrice,
-        maxPrice: priceStats.maxPrice,
-      },
-    ]);
-
-    // Build filters data
-    const filters = {
-      priceRanges: priceFilters,
-      categories: relatedCategories,
-      tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
-    };
-
     return res.status(200).json({
       success: true,
-      pagination: {
-        page: page,
-        totalPage: Math.ceil(total / pageSize),
-        totalItems: total,
-        pageSize: pageSize,
+      data: {
+        brand: brand.name,
+        products: result.data.map((p) => ({
+          ...p,
+          finalPrice: calculateFinalPrice(p),
+        })),
+        pagination: {
+          page,
+          totalPage: Math.ceil((result.metadata[0]?.total || 0) / pageSize),
+          totalItems: result.metadata[0]?.total || 0,
+          pageSize,
+        },
       },
-      brand: brand.name,
-      data:
-        products && products.length > 0
-          ? products.map((p) => ({
-              ...p,
-              finalPrice: calculateFinalPrice(p),
-            }))
-          : [],
-      filters: filters,
     });
   } catch (error) {
     console.log(error);
@@ -596,8 +378,6 @@ export const getListFromBrand = async (req, res) => {
 export const getProductHome = async (req, res) => {
   try {
     const { tags } = req.query;
-
-    // Validate tags parameter
     if (!tags || typeof tags !== "string") {
       return res.status(400).json({
         success: false,
@@ -616,14 +396,10 @@ export const getProductHome = async (req, res) => {
     const currentDate = new Date();
     const productsByTag = [];
 
-    // Process each tag sequentially to avoid memory issues
     for (const tag of tagList) {
-      // Get tag title based on type
       const tagTitle = getTagTitle(tag);
 
-      // Build aggregation pipeline for each tag
       const products = await Product.aggregate([
-        // Match enabled products with current tag
         {
           $match: {
             tags: tag,
@@ -631,27 +407,14 @@ export const getProductHome = async (req, res) => {
           },
         },
 
-        // Lookup promotions
         getPromotionLookupStage(currentDate),
         getPromotionFieldsStage(),
 
-        // Lookup reviews
         getReviewLookupStage("reviews"),
         getReviewFieldsStage(),
 
-        // Lookup categories & brand
-        getCategoryLookupStage(),
-        {
-          $lookup: {
-            from: "brands",
-            localField: "brand",
-            foreignField: "_id",
-            as: "brandInfo",
-          },
-        },
-        { $unwind: "$brandInfo" },
+        ...brandAndCategoryInfo,
 
-        // Project final fields
         {
           $project: {
             ...getPromotionProjectStage().$project,
@@ -667,7 +430,6 @@ export const getProductHome = async (req, res) => {
           },
         },
 
-        // Sort by rating and promotion
         {
           $sort: {
             averageRating: -1,
@@ -675,7 +437,6 @@ export const getProductHome = async (req, res) => {
           },
         },
 
-        // Limit results
         { $limit: 10 },
       ]);
 
@@ -786,17 +547,7 @@ export const getProductSearch = async (req, res) => {
       getReviewLookupStage("reviews"),
       getReviewFieldsStage(),
 
-      // Category & brand stages
-      getCategoryLookupStage(),
-      {
-        $lookup: {
-          from: "brands",
-          localField: "brand",
-          foreignField: "_id",
-          as: "brandInfo",
-        },
-      },
-      { $unwind: "$brandInfo" },
+      ...brandAndCategoryInfo,
 
       // Final project
       {
@@ -819,12 +570,13 @@ export const getProductSearch = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: products && products.length > 0
-      ? products.map((p) => ({
-          ...p,
-          finalPrice: calculateFinalPrice(p),
-        }))
-      : [],
+      data:
+        products && products.length > 0
+          ? products.map((p) => ({
+              ...p,
+              finalPrice: calculateFinalPrice(p),
+            }))
+          : [],
     });
   } catch (error) {
     console.log(error);
@@ -895,46 +647,24 @@ export const getAllProductByUser = async (req, res) => {
     const currentDate = new Date();
 
     const aggregationPipeline = [
-      // Basic match - enabled products
       { $match: { enable: true } },
 
-      // Lookup stages
       getPromotionLookupStage(currentDate),
       getPromotionFieldsStage(),
       getReviewLookupStage("reviews"),
       getReviewFieldsStage(),
 
-      // Lookup relations
-      {
-        $lookup: {
-          from: "categories",
-          localField: "categories",
-          foreignField: "_id",
-          as: "categoriesInfo",
-        },
-      },
-      {
-        $lookup: {
-          from: "brands",
-          localField: "brand",
-          foreignField: "_id",
-          as: "brandInfo",
-        },
-      },
-      { $unwind: "$brandInfo" },
+      ...brandAndCategoryInfo,
 
-      // Project fields
       getFullProjectStage({ createdAt: 1 }),
 
-      // Sort
       {
         $sort: {
           [sortField]: sortOrder,
-          _id: 1, // Secondary sort for consistency
+          _id: 1,
         },
       },
 
-      // Facet for pagination
       {
         $facet: {
           metadata: [{ $count: "total" }],
@@ -981,7 +711,6 @@ export const getProductDetailBySlug = async (req, res) => {
     const currentDate = new Date();
 
     const product = await Product.aggregate([
-      // Match product by slug
       {
         $match: {
           slug,
@@ -989,30 +718,12 @@ export const getProductDetailBySlug = async (req, res) => {
         },
       },
 
-      // Lookup stages
       getPromotionLookupStage(currentDate),
       getPromotionFieldsStage(),
       getReviewLookupStage("reviews"),
       getReviewFieldsStage(),
 
-      // Lookup relations
-      {
-        $lookup: {
-          from: "categories",
-          localField: "categories",
-          foreignField: "_id",
-          as: "categoriesInfo",
-        },
-      },
-      {
-        $lookup: {
-          from: "brands",
-          localField: "brand",
-          foreignField: "_id",
-          as: "brandInfo",
-        },
-      },
-      { $unwind: "$brandInfo" },
+      ...brandAndCategoryInfo,
 
       // Project all fields
       getFullProjectStage(),
@@ -1044,130 +755,42 @@ export const getProductDetailBySlug = async (req, res) => {
   }
 };
 
-export const getProductByPromotionAdd = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 12;
-    const { name, sort } = req.query;
-    const skip = (page - 1) * pageSize;
-
-    let filter = {};
-    if (name) {
-      filter.name = { $regex: name, $options: "i" };
-    }
-
-    let sortOption = {};
-    if (sort === "asc") {
-      sortOption = { price: 1 };
-    } else if (sort === "desc") {
-      sortOption = { price: -1 };
-    }
-
-    const [total, products] = await Promise.all([
-      Product.countDocuments(filter),
-      Product.find(filter)
-        .populate({ path: "categories", select: "name" })
-        .populate({ path: "brand", select: "name" })
-        .sort(sortOption)
-        .skip(skip)
-        .limit(pageSize)
-        .lean(),
-    ]);
-
-    const currentDate = new Date();
-    const activeAndFuturePromotions = await Promotion.find({
-      endDate: { $gte: currentDate },
-    }).lean();
-
-    const promotionMap = new Map();
-    activeAndFuturePromotions.forEach((promo) => {
-      promo.products.forEach((p) => {
-        promotionMap.set(p.product.toString(), {
-          promotionId: promo._id,
-          promotionName: promo.name,
-          discountPercentage: p.discountPercentage,
-          maxQty: p.maxQty,
-          startDate: promo.startDate,
-          endDate: promo.endDate,
-        });
-      });
-    });
-
-    const productsWithPromotionInfo = products.map((product) => {
-      const promotionInfo = promotionMap.get(product._id.toString());
-      return {
-        ...product,
-        promotion: promotionInfo
-          ? {
-              id: promotionInfo.promotionId,
-              name: promotionInfo.promotionName,
-              discountPercentage: promotionInfo.discountPercentage,
-              maxQty: promotionInfo.maxQty,
-              startDate: promotionInfo.startDate,
-              endDate: promotionInfo.endDate,
-            }
-          : null,
-      };
-    });
-
-    return res.status(200).json({
-      success: true,
-      pagination: {
-        page: page,
-        totalPage: Math.ceil(total / pageSize),
-        pageSize: pageSize,
-        totalItems: total,
-      },
-      data: productsWithPromotionInfo,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-      data: [],
-      error: error.message,
-    });
-  }
-};
-
 export const getProductPromotion = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 10;
-    const { priceRange, brands, sortOrder, tags, categoriesList } = req.query;
+    const pageSize = parseInt(req.query.pageSize) || 12;
+    const {
+      priceRange,
+      brands,
+      rating,
+      categories,
+      tags,
+      sortOrder = "asc",
+    } = req.query;
 
     const currentDate = new Date();
 
     // Build match stage
-    let matchStage = { enable: true };
+    let matchStage = {
+      enable: true,
+    };
 
-    if (categoriesList) {
-      const categoryIds = categoriesList
+    if (categories) {
+      const categoryIds = categories
         .split(",")
         .map((id) => new mongoose.Types.ObjectId(id));
       matchStage.categories = { $in: categoryIds };
     }
 
     if (brands) {
-      const brandIds = await Brand.find({
-        slug: { $in: brands.split(",") },
-      }).distinct("_id");
+      const brandIds = brands
+        .split(",")
+        .map((id) => new mongoose.Types.ObjectId(id));
       matchStage.brand = { $in: brandIds };
     }
 
     if (tags) {
       matchStage.tags = { $in: tags.split(",") };
-    }
-
-    // Build sort stage
-    let sortStage = {};
-    if (sortOrder === "asc") {
-      sortStage = { finalPrice: 1 };
-    } else if (sortOrder === "desc") {
-      sortStage = { finalPrice: -1 };
-    } else {
-      sortStage = { "promotion.discountPercentage": -1 };
     }
 
     const aggregationPipeline = [
@@ -1181,7 +804,17 @@ export const getProductPromotion = async (req, res) => {
       // Add other match conditions
       { $match: matchStage },
 
-      // Price range filter after promotion calculation
+      {
+        ...calulateFinalPricePipeline,
+      },
+
+      {
+        $addFields: {
+          finalPrice: { $round: ["$finalPrice", 0] },
+        },
+      },
+
+      // Price filter
       ...(priceRange
         ? [
             {
@@ -1195,175 +828,43 @@ export const getProductPromotion = async (req, res) => {
           ]
         : []),
 
-      // Lookup reviews
+      // Rating filter
+      ...(rating
+        ? [
+            {
+              $lookup: {
+                from: "reviews",
+                localField: "_id",
+                foreignField: "product",
+                as: "reviews",
+              },
+            },
+            {
+              $match: {
+                "reviews.rate": Number(rating),
+              },
+            },
+          ]
+        : []),
+
+      // Get review stats
       getReviewLookupStage("reviews"),
       getReviewFieldsStage(),
 
-      // Lookup relations
-      {
-        $lookup: {
-          from: "categories",
-          localField: "categories",
-          foreignField: "_id",
-          as: "categoriesInfo",
-        },
-      },
-      {
-        $lookup: {
-          from: "brands",
-          localField: "brand",
-          foreignField: "_id",
-          as: "brandInfo",
-        },
-      },
-      { $unwind: "$brandInfo" },
+      // Get brand & category info
+      ...brandAndCategoryInfo,
 
       // Project fields
-      getFullProjectStage(),
+      {
+        ...projectFileds,
+      },
 
       // Sort
-      { $sort: sortStage },
-
-      // Facet for pagination and filters
-      {
-        $facet: {
-          metadata: [{ $count: "total" }],
-          data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
-          categories: [
-            { $unwind: "$categories" },
-            {
-              $group: {
-                _id: "$categories._id",
-                name: { $first: "$categories.name" },
-                count: { $sum: 1 },
-              },
-            },
-            { $sort: { count: -1 } },
-          ],
-          brands: [
-            {
-              $group: {
-                _id: "$brand._id",
-                name: { $first: "$brand.name" },
-                count: { $sum: 1 },
-              },
-            },
-            { $sort: { count: -1 } },
-          ],
-          priceRanges: [
-            {
-              $group: {
-                _id: null,
-                minPrice: { $min: "$finalPrice" },
-                maxPrice: { $max: "$finalPrice" },
-              },
-            },
-          ],
-        },
-      },
-    ];
-
-    const [result] = await Product.aggregate(aggregationPipeline);
-
-    const total = result.metadata[0]?.total || 0;
-    const products = result.data;
-    const allCategories = result.categories;
-    const allBrands = result.brands;
-    const priceStats = result.priceRanges[0] || { minPrice: 0, maxPrice: 0 };
-
-    // Build price filter ranges
-    const priceFilters = getPriceFilter([
-      {
-        minPrice: priceStats.minPrice,
-        maxPrice: priceStats.maxPrice,
-      },
-    ]);
-
-    // Build filters data
-    const filters = {
-      priceRanges: priceFilters,
-      brands: allBrands,
-      categories: allCategories,
-      tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
-    };
-
-    return res.status(200).json({
-      success: true,
-      pagination: {
-        page,
-        pageSize,
-        totalPage: Math.ceil(total / pageSize),
-        totalItems: total,
-      },
-      data:
-        products && products.length > 0
-          ? products.map((p) => ({
-              ...p,
-              finalPrice: calculateFinalPrice(p),
-            }))
-          : [],
-      filters,
-    });
-  } catch (error) {
-    console.error("Get promotion products error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-      data: [],
-      error: error.message,
-    });
-  }
-};
-
-export const getProductAlmostExpired = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 12;
-
-    const currentDate = new Date();
-
-    const aggregationPipeline = [
-      // Match almost expired products
-      {
-        $match: {
-          isAlmostExpired: true,
-        },
-      },
-
-      // Lookup promotions
-      getPromotionLookupStage(currentDate),
-      getPromotionFieldsStage(),
-
-      // Lookup reviews
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
-
-      // Lookup relations
-      {
-        $lookup: {
-          from: "categories",
-          localField: "categories",
-          foreignField: "_id",
-          as: "categoriesInfo",
-        },
-      },
-      {
-        $lookup: {
-          from: "brands",
-          localField: "brand",
-          foreignField: "_id",
-          as: "brandInfo",
-        },
-      },
-      { $unwind: "$brandInfo" },
-
-      // Project fields
-      getFullProjectStage({ expiry: 1 }), // Thêm trường expiry
-
-      // Sort by expiry date
       {
         $sort: {
-          expiry: 1,
+          ...(sortOrder === "promotion"
+            ? { "promotion.discountPercentage": -1 }
+            : { finalPrice: sortOrder === "asc" ? 1 : -1 }),
           _id: 1,
         },
       },
@@ -1384,27 +885,92 @@ export const getProductAlmostExpired = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data:
-        products && products.length > 0
-          ? products.map((p) => ({
-              ...p,
-              finalPrice: calculateFinalPrice(p),
-            }))
-          : [],
-      pagination: {
-        page,
-        pageSize,
-        totalPage: Math.ceil(total / pageSize),
-        totalItems: total,
+      data: {
+        pagination: {
+          page,
+          pageSize,
+          totalPage: Math.ceil(total / pageSize),
+          totalItems: total,
+        },
+        products:
+          products && products.length > 0
+            ? products.map((p) => ({
+                ...p,
+                finalPrice: calculateFinalPrice(p),
+              }))
+            : [],
       },
     });
   } catch (error) {
-    console.error("Get almost expired products error:", error);
+    console.error("Get promotion products error:", error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",
       data: [],
       error: error.message,
     });
+  }
+};
+
+export const getProductFilters = async (req, res) => {
+  try {
+    const [categories, brands, products, promotions, reviews] =
+      await Promise.all([
+        Category.find().select("name slug parent level"),
+        Brand.find().select("name slug"),
+        Product.find().select("price tags"),
+        Promotion.find({
+          isActive: true,
+          startDate: { $lte: new Date() },
+          endDate: { $gte: new Date() },
+        }).select("products"),
+        Review.find().select("rate"),
+      ]);
+
+    const priceStats = await Product.aggregate([
+      { $match: { enable: true } },
+      {
+        $group: {
+          _id: null,
+          minPrice: { $min: "$price" },
+          maxPrice: { $max: "$price" },
+        },
+      },
+    ]);
+
+    const minPrice = priceStats[0]?.minPrice || 0;
+    const maxPrice = priceStats[0]?.maxPrice || 0;
+    const gap = (maxPrice - minPrice) / 5;
+
+    const priceRanges = [
+      { min: minPrice, max: minPrice + gap },
+      { min: minPrice + gap, max: minPrice + gap * 2 },
+      { min: minPrice + gap * 2, max: minPrice + gap * 3 },
+      { min: minPrice + gap * 3, max: minPrice + gap * 4 },
+      { min: minPrice + gap * 4, max: maxPrice },
+    ];
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        categories,
+        brands,
+        priceRanges: priceRanges.map((range) => ({
+          min: Math.round(range.min),
+          max: Math.round(range.max),
+        })),
+        tags: ["HOT", "NEW", "SALE", "SELLING", "TREND"],
+        ratings: [5, 4, 3, 2, 1].map((rate) => ({
+          rate,
+          count: reviews.filter((r) => r.rate === rate).length,
+        })),
+        promotions: promotions.map((p) => ({
+          _id: p._id,
+          productsCount: p.products.length,
+        })),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
 };

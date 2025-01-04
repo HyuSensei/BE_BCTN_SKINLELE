@@ -7,6 +7,7 @@ import ReviewClinic from "../models/review-clinic.model.js";
 import Doctor from "../models/doctor.model.js";
 import { Types } from "mongoose";
 import moment from "moment";
+import Review from "../models/review.model.js";
 moment.tz.setDefault("Asia/Ho_Chi_Minh");
 
 export const getStatistics = async (req, res) => {
@@ -737,6 +738,827 @@ export const getClinicDetailedStats = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Lỗi khi lấy thống kê chi tiết",
+      error: error.message,
+    });
+  }
+};
+
+export const getOverviewStatistics = async (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || moment().year();
+    const month = req.query.month ? parseInt(req.query.month) : null;
+    let startDate, endDate;
+
+    if (month) {
+      startDate = moment()
+        .year(year)
+        .month(month - 1)
+        .startOf("month");
+      endDate = moment(startDate).endOf("month");
+    } else {
+      startDate = moment().year(year).startOf("year");
+      endDate = moment(startDate).endOf("year");
+    }
+
+    const [orderStats, productStats, userStats, reviewStats] =
+      await Promise.all([
+        // Order Statistics
+        Order.aggregate([
+          {
+            $match: {
+              createdAt: {
+                $gte: startDate.toDate(),
+                $lte: endDate.toDate(),
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalOrders: { $sum: 1 },
+              totalAmount: { $sum: "$totalAmount" }, // Total sales
+              revenue: {
+                // Revenue from completed orders only
+                $sum: {
+                  $cond: [{ $eq: ["$status", "delivered"] }, "$totalAmount", 0],
+                },
+              },
+              ordersByStatus: {
+                $push: {
+                  status: "$status",
+                  amount: "$totalAmount",
+                },
+              },
+            },
+          },
+        ]),
+
+        // Product Statistics
+        Product.aggregate([
+          {
+            $group: {
+              _id: null,
+              totalProducts: { $sum: 1 },
+              almostExpired: {
+                $sum: { $cond: ["$isAlmostExpired", 1, 0] },
+              },
+              expired: {
+                $sum: { $cond: ["$isExpired", 1, 0] },
+              },
+            },
+          },
+        ]),
+
+        // User Statistics
+        User.aggregate([
+          {
+            $facet: {
+              total: [{ $count: "count" }],
+              active: [{ $match: { isActive: true } }, { $count: "count" }],
+              new: [
+                {
+                  $match: {
+                    createdAt: {
+                      $gte: startDate.toDate(),
+                      $lte: endDate.toDate(),
+                    },
+                  },
+                },
+                { $count: "count" },
+              ],
+            },
+          },
+        ]),
+
+        // Review Statistics
+        Review.aggregate([
+          {
+            $group: {
+              _id: null,
+              totalReviews: { $sum: 1 },
+              averageRating: { $avg: "$rate" },
+            },
+          },
+        ]),
+      ]);
+
+    // Process order status statistics
+    const orderByStatus = {};
+    if (orderStats[0]?.ordersByStatus) {
+      orderStats[0].ordersByStatus.forEach((item) => {
+        if (!orderByStatus[item.status]) {
+          orderByStatus[item.status] = {
+            count: 0,
+            amount: 0,
+          };
+        }
+        orderByStatus[item.status].count++;
+        orderByStatus[item.status].amount += item.amount;
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        order: {
+          total: orderStats[0]?.totalOrders || 0,
+          totalAmount: orderStats[0]?.totalAmount || 0,
+          revenue: orderStats[0]?.revenue || 0,
+          status: orderByStatus,
+        },
+        product: {
+          total: productStats[0]?.totalProducts || 0,
+          almostExpired: productStats[0]?.almostExpired || 0,
+          expired: productStats[0]?.expired || 0,
+        },
+        user: {
+          total: userStats[0]?.total[0]?.count || 0,
+          active: userStats[0]?.active[0]?.count || 0,
+          new: userStats[0]?.new[0]?.count || 0,
+        },
+        review: {
+          total: reviewStats[0]?.totalReviews || 0,
+          averageRating: reviewStats[0]?.averageRating
+            ? Number(reviewStats[0].averageRating.toFixed(1))
+            : 0,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error get overview statistics:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getRevenueAndOrderStats = async (req, res) => {
+  try {
+    const { type = "date" } = req.query; // date, month, year
+    const year = parseInt(req.query.year) || moment().year();
+    const month = parseInt(req.query.month) || moment().month() + 1;
+
+    let startDate, endDate, dateGroup;
+
+    switch (type) {
+      case "date":
+        startDate = moment()
+          .year(year)
+          .month(month - 1)
+          .startOf("month");
+        endDate = moment()
+          .year(year)
+          .month(month - 1)
+          .endOf("month");
+        dateGroup = {
+          day: { $dayOfMonth: "$createdAt" },
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+
+      case "month":
+        startDate = moment().year(year).startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+
+      case "year":
+        startDate = moment()
+          .year(year - 4)
+          .startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          year: { $year: "$createdAt" },
+        };
+        break;
+    }
+
+    const stats = await Order.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: startDate.toDate(),
+            $lte: endDate.toDate(),
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            ...dateGroup,
+            status: "$status",
+          },
+          totalAmount: { $sum: "$totalAmount" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+    ]);
+
+    let formattedData = [];
+
+    switch (type) {
+      case "date":
+        const daysInMonth = endDate.date();
+        for (let i = 1; i <= daysInMonth; i++) {
+          const dayStats = stats.filter(
+            (item) =>
+              item._id.day === i &&
+              item._id.month === month &&
+              item._id.year === year
+          );
+
+          formattedData.push({
+            name: `${i}/${month}`,
+            revenue:
+              dayStats.find((s) => s._id.status === "delivered")?.totalAmount ||
+              0,
+            sales: dayStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            orders: dayStats.reduce((sum, s) => sum + s.count, 0),
+            delivered:
+              dayStats.find((s) => s._id.status === "delivered")?.count || 0,
+            pending:
+              dayStats.find((s) => s._id.status === "pending")?.count || 0,
+            processing:
+              dayStats.find((s) => s._id.status === "processing")?.count || 0,
+            cancelled:
+              dayStats.find((s) => s._id.status === "cancelled")?.count || 0,
+          });
+        }
+        break;
+
+      case "month":
+        for (let i = 1; i <= 12; i++) {
+          const monthStats = stats.filter(
+            (item) => item._id.month === i && item._id.year === year
+          );
+
+          formattedData.push({
+            name: `Tháng ${i}`,
+            revenue:
+              monthStats.find((s) => s._id.status === "delivered")
+                ?.totalAmount || 0,
+            sales: monthStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            orders: monthStats.reduce((sum, s) => sum + s.count, 0),
+            delivered:
+              monthStats.find((s) => s._id.status === "delivered")?.count || 0,
+            pending:
+              monthStats.find((s) => s._id.status === "pending")?.count || 0,
+            processing:
+              monthStats.find((s) => s._id.status === "processing")?.count || 0,
+            cancelled:
+              monthStats.find((s) => s._id.status === "cancelled")?.count || 0,
+          });
+        }
+        break;
+
+      case "year":
+        for (let i = year - 4; i <= year; i++) {
+          const yearStats = stats.filter((item) => item._id.year === i);
+
+          formattedData.push({
+            name: `Năm ${i}`,
+            revenue:
+              yearStats.find((s) => s._id.status === "delivered")
+                ?.totalAmount || 0,
+            sales: yearStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            orders: yearStats.reduce((sum, s) => sum + s.count, 0),
+            delivered:
+              yearStats.find((s) => s._id.status === "delivered")?.count || 0,
+            pending:
+              yearStats.find((s) => s._id.status === "pending")?.count || 0,
+            processing:
+              yearStats.find((s) => s._id.status === "processing")?.count || 0,
+            cancelled:
+              yearStats.find((s) => s._id.status === "cancelled")?.count || 0,
+          });
+        }
+        break;
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        type,
+        timeRange: {
+          start: startDate.format("DD/MM/YYYY"),
+          end: endDate.format("DD/MM/YYYY"),
+        },
+        stats: formattedData,
+      },
+    });
+  } catch (error) {
+    console.log("Error getting statistics", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getOrderStatistics = async (req, res) => {
+  try {
+    const { type = "date" } = req.query; // date, month, year
+    const year = parseInt(req.query.year) || moment().year();
+    const month = parseInt(req.query.month) || moment().month() + 1;
+
+    let startDate, endDate, dateGroup;
+
+    switch (type) {
+      case "date":
+        startDate = moment()
+          .year(year)
+          .month(month - 1)
+          .startOf("month");
+        endDate = moment()
+          .year(year)
+          .month(month - 1)
+          .endOf("month");
+        dateGroup = {
+          day: { $dayOfMonth: "$createdAt" },
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+
+      case "month":
+        startDate = moment().year(year).startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+
+      case "year":
+        startDate = moment()
+          .year(year - 4)
+          .startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          year: { $year: "$createdAt" },
+        };
+        break;
+    }
+
+    const [orderStats, paymentStats, areaStats] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              ...dateGroup,
+              status: "$status",
+            },
+            count: { $sum: 1 },
+            total: { $sum: "$totalAmount" },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$paymentMethod",
+            count: { $sum: 1 },
+            total: { $sum: "$totalAmount" },
+            completed: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
+              },
+            },
+            completedAmount: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "delivered"] }, "$totalAmount", 0],
+              },
+            },
+          },
+        },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$province.name",
+            orders: { $sum: 1 },
+            total: { $sum: "$totalAmount" },
+            delivered: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
+              },
+            },
+            cancelled: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0],
+              },
+            },
+          },
+        },
+        { $sort: { orders: -1 } },
+        { $limit: 10 },
+      ]),
+    ]);
+
+    // Format data theo từng type
+    let formattedData = [];
+
+    switch (type) {
+      case "date":
+        const daysInMonth = endDate.date();
+        for (let i = 1; i <= daysInMonth; i++) {
+          const dayData = orderStats.filter(
+            (item) =>
+              item._id.day === i &&
+              item._id.month === month &&
+              item._id.year === year
+          );
+
+          formattedData.push({
+            name: `${i}/${month}`,
+            pending:
+              dayData.find((x) => x._id.status === "pending")?.count || 0,
+            processing:
+              dayData.find((x) => x._id.status === "processing")?.count || 0,
+            shipping:
+              dayData.find((x) => x._id.status === "shipping")?.count || 0,
+            delivered:
+              dayData.find((x) => x._id.status === "delivered")?.count || 0,
+            cancelled:
+              dayData.find((x) => x._id.status === "cancelled")?.count || 0,
+            total: dayData.reduce((sum, item) => sum + item.count, 0),
+            amount: dayData.reduce((sum, item) => sum + item.total, 0),
+          });
+        }
+        break;
+
+      case "month":
+        for (let i = 1; i <= 12; i++) {
+          const monthData = orderStats.filter(
+            (item) => item._id.month === i && item._id.year === year
+          );
+
+          formattedData.push({
+            name: `Tháng ${i}`,
+            pending:
+              monthData.find((x) => x._id.status === "pending")?.count || 0,
+            processing:
+              monthData.find((x) => x._id.status === "processing")?.count || 0,
+            shipping:
+              monthData.find((x) => x._id.status === "shipping")?.count || 0,
+            delivered:
+              monthData.find((x) => x._id.status === "delivered")?.count || 0,
+            cancelled:
+              monthData.find((x) => x._id.status === "cancelled")?.count || 0,
+            total: monthData.reduce((sum, item) => sum + item.count, 0),
+            amount: monthData.reduce((sum, item) => sum + item.total, 0),
+          });
+        }
+        break;
+
+      case "year":
+        for (let i = year - 4; i <= year; i++) {
+          const yearData = orderStats.filter((item) => item._id.year === i);
+
+          formattedData.push({
+            name: `${i}`,
+            pending:
+              yearData.find((x) => x._id.status === "pending")?.count || 0,
+            processing:
+              yearData.find((x) => x._id.status === "processing")?.count || 0,
+            shipping:
+              yearData.find((x) => x._id.status === "shipping")?.count || 0,
+            delivered:
+              yearData.find((x) => x._id.status === "delivered")?.count || 0,
+            cancelled:
+              yearData.find((x) => x._id.status === "cancelled")?.count || 0,
+            total: yearData.reduce((sum, item) => sum + item.count, 0),
+            amount: yearData.reduce((sum, item) => sum + item.total, 0),
+          });
+        }
+        break;
+    }
+
+    // Calculate totals and percentages
+    const totals = {
+      orders: formattedData.reduce((sum, item) => sum + item.total, 0),
+      amount: formattedData.reduce((sum, item) => sum + item.amount, 0),
+      delivered: formattedData.reduce((sum, item) => sum + item.delivered, 0),
+      cancelled: formattedData.reduce((sum, item) => sum + item.cancelled, 0),
+    };
+
+    totals.successRate = totals.orders
+      ? ((totals.delivered / totals.orders) * 100).toFixed(2)
+      : 0;
+    totals.cancelRate = totals.orders
+      ? ((totals.cancelled / totals.orders) * 100).toFixed(2)
+      : 0;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        timeStats: formattedData,
+        paymentStats: paymentStats.map((item) => ({
+          name: item._id,
+          orders: item.count,
+          total: item.total,
+          completed: item.completed,
+          completedAmount: item.completedAmount,
+          successRate: ((item.completed / item.count) * 100).toFixed(2),
+        })),
+        areaStats,
+        totals,
+        timeRange: {
+          start: startDate.format("DD/MM/YYYY"),
+          end: endDate.format("DD/MM/YYYY"),
+          type,
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error getting order statistics",
+      error: error.message,
+    });
+  }
+};
+
+export const getReviewStatistics = async (req, res) => {
+  try {
+    const { type = "date" } = req.query;
+    const year = parseInt(req.query.year) || moment().year();
+    const month = parseInt(req.query.month) || moment().month() + 1;
+
+    let startDate, endDate, dateGroup;
+
+    switch (type) {
+      case "date":
+        startDate = moment()
+          .year(year)
+          .month(month - 1)
+          .startOf("month");
+        endDate = moment()
+          .year(year)
+          .month(month - 1)
+          .endOf("month");
+        dateGroup = {
+          day: { $dayOfMonth: "$createdAt" },
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+      case "month":
+        startDate = moment().year(year).startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+      case "year":
+        startDate = moment()
+          .year(year - 4)
+          .startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          year: { $year: "$createdAt" },
+        };
+        break;
+    }
+
+    const [timeStats, productStats, ratingDistribution] = await Promise.all([
+      // 1. Thống kê theo thời gian
+      Review.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: dateGroup,
+            count: { $sum: 1 },
+            avgRating: { $avg: "$rate" },
+            ratings: {
+              $push: "$rate",
+            },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+      ]),
+
+      // 2. Thống kê theo sản phẩm
+      Review.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$product",
+            totalReviews: { $sum: 1 },
+            avgRating: { $avg: "$rate" },
+            ratings: {
+              $push: "$rate",
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "_id",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+        {
+          $project: {
+            productName: "$product.name",
+            totalReviews: 1,
+            avgRating: 1,
+            ratings: 1,
+          },
+        },
+        { $sort: { totalReviews: -1 } },
+        { $limit: 10 },
+      ]),
+
+      // 3. Phân bố điểm đánh giá
+      Review.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$rate",
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: -1 } },
+      ]),
+    ]);
+
+    // Format data theo từng type
+    let formattedTimeStats = [];
+
+    switch (type) {
+      case "date":
+        const daysInMonth = endDate.date();
+        for (let i = 1; i <= daysInMonth; i++) {
+          const dayData = timeStats.find(
+            (item) =>
+              item._id.day === i &&
+              item._id.month === month &&
+              item._id.year === year
+          ) || { count: 0, avgRating: 0 };
+
+          formattedTimeStats.push({
+            name: `${i}/${month}`,
+            total: dayData.count,
+            avgRating: Number(dayData.avgRating?.toFixed(1)) || 0,
+            ratingCounts:
+              dayData.ratings?.reduce((acc, rate) => {
+                acc[rate] = (acc[rate] || 0) + 1;
+                return acc;
+              }, {}) || {},
+          });
+        }
+        break;
+
+      case "month":
+        for (let i = 1; i <= 12; i++) {
+          const monthData = timeStats.find(
+            (item) => item._id.month === i && item._id.year === year
+          ) || { count: 0, avgRating: 0 };
+
+          formattedTimeStats.push({
+            name: `Tháng ${i}`,
+            total: monthData.count,
+            avgRating: Number(monthData.avgRating?.toFixed(1)) || 0,
+            ratingCounts:
+              monthData.ratings?.reduce((acc, rate) => {
+                acc[rate] = (acc[rate] || 0) + 1;
+                return acc;
+              }, {}) || {},
+          });
+        }
+        break;
+
+      case "year":
+        for (let i = year - 4; i <= year; i++) {
+          const yearData = timeStats.find((item) => item._id.year === i) || {
+            count: 0,
+            avgRating: 0,
+          };
+
+          formattedTimeStats.push({
+            name: `${i}`,
+            total: yearData.count,
+            avgRating: Number(yearData.avgRating?.toFixed(1)) || 0,
+            ratingCounts:
+              yearData.ratings?.reduce((acc, rate) => {
+                acc[rate] = (acc[rate] || 0) + 1;
+                return acc;
+              }, {}) || {},
+          });
+        }
+        break;
+    }
+
+    // Format product stats
+    const formattedProductStats = productStats.map((product) => ({
+      name: product.productName,
+      total: product.totalReviews,
+      avgRating: Number(product.avgRating.toFixed(1)),
+      ratingCounts: product.ratings.reduce((acc, rate) => {
+        acc[rate] = (acc[rate] || 0) + 1;
+        return acc;
+      }, {}),
+    }));
+
+    // Calculate totals
+    const totals = {
+      totalReviews: formattedTimeStats.reduce(
+        (sum, item) => sum + item.total,
+        0
+      ),
+      avgRating:
+        Number(
+          (
+            formattedTimeStats.reduce(
+              (sum, item) => sum + item.avgRating * item.total,
+              0
+            ) / formattedTimeStats.reduce((sum, item) => sum + item.total, 0)
+          ).toFixed(1)
+        ) || 0,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        timeStats: formattedTimeStats,
+        productStats: formattedProductStats,
+        ratingDistribution: ratingDistribution.map((item) => ({
+          rate: item._id,
+          count: item.count,
+          percentage: Number(
+            ((item.count / totals.totalReviews) * 100).toFixed(1)
+          ),
+        })),
+        totals,
+        timeRange: {
+          start: startDate.format("DD/MM/YYYY"),
+          end: endDate.format("DD/MM/YYYY"),
+          type,
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error getting review statistics",
       error: error.message,
     });
   }

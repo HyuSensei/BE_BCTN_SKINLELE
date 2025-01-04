@@ -63,40 +63,6 @@ export const getPromotionFieldsStage = () => ({
     promotionProduct: { $arrayElemAt: ["$promotionInfo.products", 0] },
     isPromotion: { $gt: [{ $size: "$promotionInfo" }, 0] },
     price: "$price",
-    // finalPrice: {
-    //   $cond: {
-    //     if: { $gt: [{ $size: "$promotionInfo" }, 0] },
-    //     then: {
-    //       $let: {
-    //         vars: {
-    //           discountPercentage: {
-    //             $convert: {
-    //               input: {
-    //                 $ifNull: [
-    //                   { $first: "$promotionProduct.discountPercentage" },
-    //                   0,
-    //                 ],
-    //               },
-    //               to: "double",
-    //             },
-    //           },
-    //         },
-    //         in: {
-    //           $subtract: [
-    //             "$price",
-    //             {
-    //               $multiply: [
-    //                 "$price",
-    //                 { $divide: ["$$discountPercentage", 100] },
-    //               ],
-    //             },
-    //           ],
-    //         },
-    //       },
-    //     },
-    //     else: "$price",
-    //   },
-    // },
   },
 });
 
@@ -114,7 +80,6 @@ export const getPromotionProjectStage = () => ({
     variants: 1,
     capacity: 1,
     price: 1,
-    // finalPrice: 1,
     isPromotion: 1,
     promotion: {
       $cond: {
@@ -149,3 +114,43 @@ export const getPromotionProjectStage = () => ({
     },
   },
 });
+
+export const calulateFinalPricePipeline = {
+  $addFields: {
+    finalPrice: {
+      $cond: {
+        if: { $eq: [{ $type: "$promotion" }, "missing"] },
+        then: "$price",
+        else: {
+          $let: {
+            vars: {
+              discountAmount: {
+                $multiply: [
+                  "$price",
+                  { $divide: ["$promotion.discountPercentage", 100] },
+                ],
+              },
+            },
+            in: {
+              $subtract: [
+                "$price",
+                {
+                  $cond: {
+                    if: { $gt: ["$promotion.maxDiscountAmount", 0] },
+                    then: {
+                      $min: [
+                        "$$discountAmount",
+                        "$promotion.maxDiscountAmount",
+                      ],
+                    },
+                    else: "$$discountAmount",
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+  },
+};

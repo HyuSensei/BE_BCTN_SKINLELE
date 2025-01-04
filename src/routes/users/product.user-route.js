@@ -8,17 +8,19 @@ import {
   getListFromBrand,
   getAllProductByUser,
   getProductPromotion,
+  getProductFilters,
 } from "../../controllers/product-base.controller.js";
 
 const router = express.Router();
 
-router.get("/categories/:slug", getListFromCategory);
-router.get("/brands/:slug", getListFromBrand);
 router.get("/search", getProductSearch);
-router.get("/detail/:slug", getProductDetailBySlug);
 router.get("/home", getProductHome);
 router.get("/search-page", getProductPageSearch);
 router.get("/all-other", getAllProductByUser);
 router.get("/promotions", getProductPromotion);
+router.get("/filter-options", getProductFilters);
+router.get("/detail/:slug", getProductDetailBySlug);
+router.get("/categories/:slug", getListFromCategory);
+router.get("/brands/:slug", getListFromBrand);
 
 export default router;
