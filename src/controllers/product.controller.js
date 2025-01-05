@@ -20,6 +20,7 @@ export const createProduct = async (req, res) => {
       enable,
       capacity,
       expiry,
+      totalQuantity = 0,
     } = req.body;
 
     const existingProduct = await Product.findOne({ name }).lean();
@@ -43,6 +44,7 @@ export const createProduct = async (req, res) => {
       enable,
       expiry: new Date(expiry),
       capacity,
+      totalQuantity,
     });
 
     const savedProduct = await newProduct.save();
@@ -62,6 +64,73 @@ export const createProduct = async (req, res) => {
   }
 };
 
+// export const updateProduct = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const {
+//       name,
+//       categories,
+//       brand,
+//       images,
+//       price,
+//       description,
+//       mainImage,
+//       variants,
+//       tags,
+//       expiry,
+//       enable,
+//       totalQuantity,
+//     } = req.body;
+//     const updateData = {
+//       name,
+//       categories,
+//       brand,
+//       images,
+//       price,
+//       description,
+//       mainImage,
+//       variants,
+//       tags,
+//       expiry: new Date(expiry),
+//       enable,
+//       totalQuantity,
+//     };
+//     Object.keys(updateData).forEach(
+//       (key) => updateData[key] === (undefined || "") && delete updateData[key]
+//     );
+
+//     if (name) {
+//       const newSlug = slugify(name, { lower: true, locale: "vi" });
+//       updateData.slug = newSlug;
+//     }
+
+//     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
+//       new: true,
+//       runValidators: true,
+//     });
+
+//     if (!updatedProduct) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Không tìm thấy sản phẩm",
+//       });
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Cập nhật sản phẩm thành công",
+//       data: updatedProduct,
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Có lỗi xảy ra khi cập nhật sản phẩm",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -77,7 +146,9 @@ export const updateProduct = async (req, res) => {
       tags,
       expiry,
       enable,
+      totalQuantity,
     } = req.body;
+
     const updateData = {
       name,
       categories,
@@ -90,10 +161,13 @@ export const updateProduct = async (req, res) => {
       tags,
       expiry: new Date(expiry),
       enable,
+      totalQuantity: totalQuantity ? totalQuantity : 0,
     };
 
     Object.keys(updateData).forEach(
-      (key) => updateData[key] === (undefined || "") && delete updateData[key]
+      (key) =>
+        updateData[key] === undefined ||
+        (updateData[key] === "" && delete updateData[key])
     );
 
     if (name) {
@@ -101,17 +175,25 @@ export const updateProduct = async (req, res) => {
       updateData.slug = newSlug;
     }
 
-    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    console.log("====================================");
+    console.log(updateData);
+    console.log("====================================");
+    console.log("====================================");
+    console.log(variants);
+    console.log("====================================");
 
-    if (!updatedProduct) {
+    const product = await Product.findOne({ _id: id });
+
+    if (!product) {
       return res.status(404).json({
         success: false,
         message: "Không tìm thấy sản phẩm",
       });
     }
+
+    Object.assign(product, updateData);
+
+    const updatedProduct = await product.save();
 
     return res.status(200).json({
       success: true,
@@ -1938,7 +2020,6 @@ export const getProductByPromotionAdd = async (req, res) => {
     });
   }
 };
-
 
 export const getProductPromotion = async (req, res) => {
   try {

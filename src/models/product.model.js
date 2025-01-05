@@ -76,6 +76,12 @@ export const ProductSchema = new mongoose.Schema(
             },
           },
         },
+        quantity: {
+          type: Number,
+          required: true,
+          min: 0,
+          default: 0,
+        },
       },
     ],
     enable: {
@@ -105,12 +111,45 @@ export const ProductSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    totalQuantity: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );
 
 ProductSchema.pre("save", function (next) {
   this.slug = slugify(this.name, { lower: true, locale: "vi" });
+  next();
+});
+
+ProductSchema.pre("save", function (next) {
+  let variantsTotal = 0;
+  if (this.variants && this.variants.length > 0) {
+    variantsTotal = this.variants.reduce(
+      (sum, variant) => sum + variant.quantity,
+      0
+    );
+  }
+
+  this.totalQuantity = this.quantity + variantsTotal;
+  next();
+});
+
+ProductSchema.pre("validate", function (next) {
+  if (this.variants && this.variants.length > 0) {
+    for (const variant of this.variants) {
+      if (variant.quantity < 0) {
+        next(new Error("Số lượng variant không thể là số âm"));
+        return;
+      }
+    }
+  }
+  if (this.quantity < 0) {
+    next(new Error("Số lượng sản phẩm không thể là số âm"));
+    return;
+  }
   next();
 });
 
