@@ -122,17 +122,19 @@ export const ProductSchema = new mongoose.Schema(
 ProductSchema.pre("save", function (next) {
   this.slug = slugify(this.name, { lower: true, locale: "vi" });
 
-  let variantsTotal = 0;
   if (this.variants && this.variants.length > 0) {
-    variantsTotal = this.variants.reduce(
+    let variantsTotal = this.variants.reduce(
       (sum, variant) => sum + variant.quantity,
       0
     );
+    this.totalQuantity = variantsTotal;
+  } else if (!this.isModified("totalQuantity")) {
+    this.totalQuantity = this.totalQuantity || 0;
   }
 
-  this.totalQuantity = variantsTotal;
   next();
 });
+
 
 ProductSchema.pre("validate", function (next) {
   if (this.variants && this.variants.length > 0) {

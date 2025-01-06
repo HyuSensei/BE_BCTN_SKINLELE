@@ -94,7 +94,7 @@ export const updateProduct = async (req, res) => {
       tags,
       expiry: new Date(expiry),
       enable,
-      totalQuantity: totalQuantity ? totalQuantity : 0,
+      totalQuantity,
     };
 
     Object.keys(updateData).forEach(
@@ -118,6 +118,10 @@ export const updateProduct = async (req, res) => {
     }
 
     Object.assign(product, updateData);
+
+    console.log("====================================");
+    console.log(updateData);
+    console.log("====================================");
 
     const updatedProduct = await product.save();
 
