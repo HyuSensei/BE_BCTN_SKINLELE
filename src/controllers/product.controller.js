@@ -64,73 +64,6 @@ export const createProduct = async (req, res) => {
   }
 };
 
-// export const updateProduct = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const {
-//       name,
-//       categories,
-//       brand,
-//       images,
-//       price,
-//       description,
-//       mainImage,
-//       variants,
-//       tags,
-//       expiry,
-//       enable,
-//       totalQuantity,
-//     } = req.body;
-//     const updateData = {
-//       name,
-//       categories,
-//       brand,
-//       images,
-//       price,
-//       description,
-//       mainImage,
-//       variants,
-//       tags,
-//       expiry: new Date(expiry),
-//       enable,
-//       totalQuantity,
-//     };
-//     Object.keys(updateData).forEach(
-//       (key) => updateData[key] === (undefined || "") && delete updateData[key]
-//     );
-
-//     if (name) {
-//       const newSlug = slugify(name, { lower: true, locale: "vi" });
-//       updateData.slug = newSlug;
-//     }
-
-//     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
-//       new: true,
-//       runValidators: true,
-//     });
-
-//     if (!updatedProduct) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Không tìm thấy sản phẩm",
-//       });
-//     }
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Cập nhật sản phẩm thành công",
-//       data: updatedProduct,
-//     });
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Có lỗi xảy ra khi cập nhật sản phẩm",
-//       error: error.message,
-//     });
-//   }
-// };
-
 export const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -174,13 +107,6 @@ export const updateProduct = async (req, res) => {
       const newSlug = slugify(name, { lower: true, locale: "vi" });
       updateData.slug = newSlug;
     }
-
-    console.log("====================================");
-    console.log(updateData);
-    console.log("====================================");
-    console.log("====================================");
-    console.log(variants);
-    console.log("====================================");
 
     const product = await Product.findOne({ _id: id });
 

@@ -4,6 +4,8 @@ import Stripe from "stripe";
 import OrderSession from "../models/order-session.model.js";
 import dotenv from "dotenv";
 import { updatePromotionAfterOrder } from "../services/promotion.service.js";
+import mongoose from "mongoose";
+import { calculateOrderAmount, updateInventory, validateOrder } from "../services/order.service.js";
 dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -19,6 +21,8 @@ const vnpay = new VNPay({
 });
 
 export const createOrderCod = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const user = req.user;
     const {
@@ -30,25 +34,50 @@ export const createOrderCod = async (req, res) => {
       district,
       ward,
       paymentMethod,
-      totalAmount,
+      // totalAmount,
       note,
     } = req.body;
+
+    // Validate đơn hàng
+    const validationErrors = await validateOrder(products);
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: validationErrors[0] || "Đơn hàng không hợp lệ",
+        errors: validationErrors,
+      });
+    }
+
+     // Tính toán giá và xử lý sản phẩm
+     const { totalAmount, products: processedProducts } = await calculateOrderAmount(products);
+
+    // Tạo đơn hàng mới
     const newOrder = new Order({
-      user: user._id,
+      user,
       name,
-      products,
+      products: processedProducts,
       phone,
       address,
       province,
       district,
       ward,
-      paymentMethod,
+      paymentMethod: "COD",
       totalAmount,
-      note: note ? note : "KHÔNG CÓ",
+      note: note || "KHÔNG CÓ",
     });
-    const savedOrder = await newOrder.save();
+    
+    // Lưu đơn hàng
+    await newOrder.save({ session });
 
-    await updatePromotionAfterOrder(products);
+    // Cập nhật số lượng sản phẩm
+    await updateInventory(processedProducts, session);
+
+    // Cập nhật thông tin khuyến mãi
+    await updatePromotionAfterOrder(processedProducts);
+
+    // Commit transaction
+    await session.commitTransaction();
+
     res.status(201).json({
       success: true,
       message: "Đặt hàng thành công",

@@ -121,10 +121,7 @@ export const ProductSchema = new mongoose.Schema(
 
 ProductSchema.pre("save", function (next) {
   this.slug = slugify(this.name, { lower: true, locale: "vi" });
-  next();
-});
 
-ProductSchema.pre("save", function (next) {
   let variantsTotal = 0;
   if (this.variants && this.variants.length > 0) {
     variantsTotal = this.variants.reduce(
@@ -133,7 +130,7 @@ ProductSchema.pre("save", function (next) {
     );
   }
 
-  this.totalQuantity = this.quantity + variantsTotal;
+  this.totalQuantity = variantsTotal;
   next();
 });
 

@@ -124,6 +124,23 @@ export const OrderSchema = new mongoose.Schema(
       enum: ["normal", "express"],
       default: "normal",
     },
+    statusHistory: [
+      {
+        prevStatus: String,
+        status: String,
+        updatedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          refPath: "statusHistory.updatedByModel",
+        },
+        updatedByModel: {
+          type: String,
+          enum: ["User", "Admin"],
+          },
+          date: {
+            type: Date,
+          }
+        },
+    ],
   },
   { timestamps: true }
 );
