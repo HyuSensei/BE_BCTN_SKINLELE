@@ -5,7 +5,13 @@ import OrderSession from "../models/order-session.model.js";
 import dotenv from "dotenv";
 import { updatePromotionAfterOrder } from "../services/promotion.service.js";
 import mongoose from "mongoose";
-import { calculateOrderAmount, updateInventory, validateOrder } from "../services/order.service.js";
+import {
+  calculateOrderAmount,
+  restoreProductQuantity,
+  updateInventory,
+  validateOrder,
+} from "../services/order.service.js";
+
 dotenv.config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -33,7 +39,6 @@ export const createOrderCod = async (req, res) => {
       province,
       district,
       ward,
-      paymentMethod,
       // totalAmount,
       note,
     } = req.body;
@@ -48,8 +53,9 @@ export const createOrderCod = async (req, res) => {
       });
     }
 
-     // Tính toán giá và xử lý sản phẩm
-     const { totalAmount, products: processedProducts } = await calculateOrderAmount(products);
+    // Tính toán giá và xử lý sản phẩm
+    const { totalAmount, products: processedProducts } =
+      await calculateOrderAmount(products);
 
     // Tạo đơn hàng mới
     const newOrder = new Order({
@@ -65,7 +71,7 @@ export const createOrderCod = async (req, res) => {
       totalAmount,
       note: note || "KHÔNG CÓ",
     });
-    
+
     // Lưu đơn hàng
     await newOrder.save({ session });
 
@@ -81,112 +87,252 @@ export const createOrderCod = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Đặt hàng thành công",
-      data: savedOrder,
+      data: newOrder,
     });
   } catch (error) {
-    console.log(error);
+    console.log("Error create order COD", error);
+    await session.abortTransaction();
     res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi đặt hàng",
       error: error.message,
     });
+  } finally {
+    session.endSession();
   }
 };
 
 export const createOrderVnpay = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const user = req.user;
-    const {
-      name,
-      products,
-      phone,
-      address,
-      province,
-      district,
-      ward,
-      paymentMethod,
-      totalAmount,
-      note,
-    } = req.body;
+    const user = req.user._id;
+    const { name, products, phone, address, province, district, ward, note } =
+      req.body;
+
+    // Validate đơn hàng
+    const validationErrors = await validateOrder(products);
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Đơn hàng không hợp lệ",
+        errors: validationErrors,
+      });
+    }
+
+    // Tính toán giá và xử lý sản phẩm
+    const { totalAmount, products: processedProducts } =
+      await calculateOrderAmount(products);
+
+    // Tạo đơn hàng mới - chưa cập nhật inventory và promotion
     const newOrder = new Order({
-      user: user._id,
+      user,
       name,
-      products,
+      products: processedProducts,
       phone,
       address,
       province,
       district,
       ward,
-      paymentMethod,
+      paymentMethod: "VNPAY",
       totalAmount,
-      note: note ? note : "KHÔNG CÓ",
+      note: note || "KHÔNG CÓ",
+      status: "pending",
     });
-    const savedOrder = await newOrder.save();
 
-    await updatePromotionAfterOrder(products);
+    await newOrder.save({ session });
 
+    // Lấy IP của người dùng
     const ipAddr =
       req.headers["x-forwarded-for"] ||
       req.connection.remoteAddress ||
       req.socket.remoteAddress ||
       req.ip;
 
+    // Tạo URL thanh toán VNPay
     const paymentUrl = vnpay.buildPaymentUrl({
-      vnp_Amount: savedOrder.totalAmount,
+      vnp_Amount: newOrder.totalAmount,
       vnp_IpAddr: ipAddr,
-      vnp_TxnRef: savedOrder._id,
-      vnp_OrderInfo: `Thanh toan cho ma GD: ${savedOrder._id}`,
+      vnp_TxnRef: newOrder._id,
+      vnp_OrderInfo: `Thanh toan don hang: ${newOrder._id}`,
       vnp_OrderType: ProductCode.Other,
       vnp_ReturnUrl: process.env.ORDER_RETURN_URL,
       vnp_Locale: VnpLocale.VN,
     });
+
+    await session.commitTransaction();
 
     return res.status(200).json({
       success: true,
       data: paymentUrl,
     });
   } catch (error) {
+    await session.abortTransaction();
     console.log(error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Có lỗi xảy ra khi đặt hàng",
+      message: "Có lỗi xảy ra khi tạo đơn hàng",
       error: error.message,
     });
+  } finally {
+    session.endSession();
+  }
+};
+
+export const orderVnpayReturn = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { orderId, code } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy thông tin đơn hàng",
+      });
+    }
+
+    let result;
+
+    switch (code) {
+      // Thanh toán thành công
+      case "00": {
+        // Cập nhật inventory
+        await updateInventory(order.products, session);
+
+        // Cập nhật promotion
+        await updatePromotionAfterOrder(order.products);
+
+        await session.commitTransaction();
+
+        result = {
+          success: true,
+          message: "Thanh toán đơn hàng thành công",
+          data: order,
+        };
+        break;
+      }
+
+      // Các trường hợp hủy hoặc thất bại
+      case "24": {
+        await Order.deleteOne({ _id: orderId }, { session });
+        await session.commitTransaction();
+
+        result = {
+          success: false,
+          message: "Giao dịch không thành công do: Khách hàng hủy giao dịch",
+        };
+        break;
+      }
+
+      case "11": {
+        await Order.deleteOne({ _id: orderId }, { session });
+        await session.commitTransaction();
+
+        result = {
+          success: false,
+          message: "Giao dịch không thành công do: Khách hàng hủy giao dịch",
+        };
+        break;
+      }
+
+      case "12": {
+        await Order.deleteOne({ _id: orderId }, { session });
+        await session.commitTransaction();
+
+        result = {
+          success: false,
+          message:
+            "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa",
+        };
+        break;
+      }
+
+      case "75": {
+        await Order.deleteOne({ _id: orderId }, { session });
+        await session.commitTransaction();
+
+        result = {
+          success: false,
+          message: "Ngân hàng thanh toán đang bảo trì",
+        };
+        break;
+      }
+
+      default: {
+        await Order.deleteOne({ _id: orderId }, { session });
+        await session.commitTransaction();
+
+        result = {
+          success: false,
+          message: "Giao dịch không thành công",
+        };
+        break;
+      }
+    }
+
+    return res.status(result.success ? 200 : 402).json(result);
+  } catch (error) {
+    await session.abortTransaction();
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi xử lý kết quả thanh toán",
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
   }
 };
 
 export const createOrderStripe = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const user = req.user;
-    const {
-      name,
-      products,
-      phone,
-      address,
-      province,
-      district,
-      ward,
-      paymentMethod,
-      totalAmount,
-      note,
-    } = req.body;
+    const { name, products, phone, address, province, district, ward, note } =
+      req.body;
 
-    const dataCreate = new OrderSession({
-      user: user._id,
+    // Validate đơn hàng
+    const validationErrors = await validateOrder(products);
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Đơn hàng không hợp lệ",
+        errors: validationErrors,
+      });
+    }
+
+    // Tính toán giá và xử lý sản phẩm
+    const { totalAmount, products: processedProducts } =
+      await calculateOrderAmount(products);
+
+    // Tạo đơn hàng tạm thời
+    const orderSessionData = {
+      user,
       name,
-      products,
+      products: processedProducts,
       phone,
       address,
       province,
       district,
       ward,
-      paymentMethod,
+      paymentMethod: "STRIPE",
       totalAmount,
-      note: note ? note : "KHÔNG CÓ",
+      note: note || "KHÔNG CÓ",
+    };
+
+    const orderSession = await OrderSession.create([orderSessionData], {
+      session,
     });
-    const orderSession = await dataCreate.save();
 
-    const lineItems = products.map((item) => ({
+    // Tạo line items cho Stripe
+    const lineItems = processedProducts.map((item) => ({
       price_data: {
         currency: "vnd",
         product_data: {
@@ -201,69 +347,38 @@ export const createOrderStripe = async (req, res) => {
       quantity: item.quantity,
     }));
 
-    const session = await stripe.checkout.sessions.create({
+    // Tạo Stripe session
+    const stripeSession = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       metadata: {
-        orderId: JSON.stringify(orderSession._id),
+        orderId: JSON.stringify(orderSession[0]._id),
       },
       line_items: lineItems,
       mode: "payment",
       success_url: `${process.env.ORDER_RETURN_URL}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.ORDER_RETURN_URL}?order_session=${orderSession._id}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.ORDER_RETURN_URL}?order_session=${orderSession[0]._id}&session_id={CHECKOUT_SESSION_ID}`,
     });
+
+    await session.commitTransaction();
 
     return res.status(200).json({
       success: true,
-      id: session.id,
+      id: stripeSession.id,
     });
   } catch (error) {
+    await session.abortTransaction();
     console.log(error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Có lỗi xảy ra khi đặt hàng",
+      message: "Có lỗi xảy ra khi tạo đơn hàng",
       error: error.message,
     });
+  } finally {
+    session.endSession();
   }
 };
 
-const createOrderWebhook = async ({
-  orderId,
-  action,
-  stripeSessionId = "",
-}) => {
-  const orderSession = await OrderSession.findById(orderId)
-    .select("-__v -createdAt -updatedAt -_id")
-    .lean();
-  if (!orderSession) return;
-
-  switch (action) {
-    case "create":
-      // return await Promise.all([
-      //   Order.create({
-      //     ...orderSession,
-      //     stripeSessionId,
-      //   }),
-      //   OrderSession.deleteOne({ _id: orderId }),
-      // ]);
-      const [createdOrder] = await Promise.all([
-        Order.create({
-          ...orderSession,
-          stripeSessionId,
-        }),
-        OrderSession.deleteOne({ _id: orderId }),
-      ]);
-      await updatePromotionAfterOrder(orderSession.products);
-
-      return createdOrder;
-
-    case "delete":
-      return await OrderSession.deleteOne({ _id: orderId });
-
-    default:
-      break;
-  }
-};
-
+// Webhook xử lý khi thanh toán Stripe thành công
 export const handleWebhookOrder = async (req, res) => {
   const sig = req.headers["stripe-signature"];
 
@@ -280,100 +395,59 @@ export const handleWebhookOrder = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  switch (event.type) {
-    case "checkout.session.completed":
-      const checkoutCompleted = event.data.object;
-      return await createOrderWebhook({
-        orderId: JSON.parse(checkoutCompleted.metadata.orderId),
-        action: "create",
-        stripeSessionId: checkoutCompleted.id,
-      });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    case "checkout.session.async_payment_failed":
-      const checkoutFailed = event.data.object;
-      return await createOrderWebhook({
-        orderId: JSON.parse(checkoutFailed.metadata.orderId),
-        action: "delete",
-      });
-
-    case "checkout.session.expired":
-      const checkoutExpired = event.data.object;
-      return await createOrderWebhook({
-        orderId: JSON.parse(checkoutExpired.metadata.orderId),
-        action: "delete",
-      });
-
-    case "payment_intent.canceled":
-      return await createOrderWebhook({
-        orderId: JSON.parse(paymentCanceled.metadata.orderId),
-        action: "delete",
-      });
-
-    default:
-      break;
-  }
-
-  res.send();
-};
-
-export const orderVnpayReturn = async (req, res) => {
   try {
-    const { orderId, code } = req.body;
-    const order = await Order.findById(orderId).lean();
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const checkoutCompleted = event.data.object;
+        const orderSessionId = JSON.parse(checkoutCompleted.metadata.orderId);
 
-    if (!order || !orderId) {
-      return res.status(404).json({
-        success: false,
-        message: "Thông tin đặt hàng không tồn tại",
-      });
+        // Lấy thông tin đơn hàng tạm thời
+        const orderSession = await OrderSession.findById(orderSessionId);
+        if (!orderSession) {
+          throw new Error("Không tìm thấy thông tin đơn hàng tạm thời");
+        }
+
+        // Tạo đơn hàng chính thức
+        const orderData = orderSession.toObject();
+        delete orderData._id;
+        orderData.stripeSessionId = checkoutCompleted.id;
+
+        const order = new Order(orderData);
+        await order.save({ session });
+
+        // Cập nhật inventory
+        await updateInventory(orderData.products, session);
+
+        // Cập nhật promotion
+        await updatePromotionAfterOrder(orderData.products);
+
+        // Xóa đơn hàng tạm thời
+        await OrderSession.findByIdAndDelete(orderSessionId, { session });
+        break;
+      }
+
+      case "checkout.session.expired":
+      case "payment_intent.payment_failed": {
+        const sessionData = event.data.object;
+        const orderSessionId = JSON.parse(sessionData.metadata.orderId);
+
+        // Xóa đơn hàng tạm thời
+        await OrderSession.findByIdAndDelete(orderSessionId, { session });
+        break;
+      }
     }
 
-    switch (code) {
-      case "24":
-        await Order.deleteOne({ _id: orderId });
-        return res.status(402).json({
-          success: false,
-          message: "Giao dịch không thành công do: Khách hàng hủy giao dịch",
-        });
-      case "11":
-        await Order.deleteOne({ _id: orderId });
-        return res.status(402).json({
-          success: false,
-          message: "Giao dịch không thành công do: Khách hàng hủy giao dịch",
-        });
-      case "12":
-        await Order.deleteOne({ _id: orderId });
-        return res.status(402).json({
-          success: false,
-          message:
-            "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa",
-        });
-      case "75":
-        await Order.deleteOne({ _id: orderId });
-        return res.status(402).json({
-          success: false,
-          message: "Ngân hàng thanh toán đang bảo trì",
-        });
-      case "00":
-        return res.status(200).json({
-          success: true,
-          message: "Thanh toán đơn hàng thành công",
-          data: order,
-        });
-      default:
-        await Order.deleteOne({ _id: orderId });
-        return res.status(402).json({
-          success: false,
-          message: "Giao dịch không thành công",
-        });
-    }
+    await session.commitTransaction();
+    res.json({ received: true });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      success: false,
-      message: "Thông tin đặt hàng không tồn tại",
-      error: error.message,
-    });
+    await session.abortTransaction();
+    console.error("Webhook error:", error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -448,8 +522,12 @@ export const updateOrder = async (req, res) => {
 export const updateOrderByUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id);
-    const { status, name, province, district, ward, phone, address } = req.body;
+    const user = req.user;
+    const { name, province, district, ward, phone, address } = req.body;
+    const order = await Order.findOne({
+      _id: id,
+      user: user._id,
+    });
 
     if (!order) {
       return res.status(404).json({
@@ -459,7 +537,6 @@ export const updateOrderByUser = async (req, res) => {
     }
 
     Object.assign(order, {
-      ...(status && { status }),
       ...(name && { name }),
       ...(province?.id && { province }),
       ...(district?.id && { district }),
@@ -518,6 +595,10 @@ export const getOrderByUser = async (req, res) => {
 
     const [orders, total, counts] = await Promise.all([
       Order.find({ user: user._id, status: statusCondition })
+        .populate({
+          path: "statusHistory.updatedBy",
+          select: "name",
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(pageSize)),
@@ -620,31 +701,6 @@ export const getOrderByAdmin = async (req, res) => {
   }
 };
 
-export const removeOrder = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedOrder = await Order.findByIdAndDelete(id);
-
-    if (!deletedOrder) {
-      return res.status(404).json({
-        success: false,
-        message: "Đơn hàng không tồn tại",
-      });
-    }
-    return res.status(200).json({
-      success: true,
-      message: "Xóa đơn hàng thành công",
-      data: deletedOrder,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Có lỗi khi xóa đơn hàng",
-      error: error.message,
-    });
-  }
-};
-
 export const getOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
@@ -668,13 +724,95 @@ export const getOrderDetails = async (req, res) => {
   }
 };
 
+// export const updateStatusOrderByUser = async (req, res) => {
+//   try {
+//     const id = req.params.id;
+//     const { status, cancelReason } = req.body;
+
+//     const order = await Order.findById(id);
+
+//     if (!order) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Đơn hàng không tồn tại",
+//       });
+//     }
+
+//     switch (status) {
+//       case "cancelled":
+//         if (order.paymentMethod !== "COD") {
+//           return res.status(400).json({
+//             success: false,
+//             message:
+//               "Đơn hàng đã thanh toán không thể hủy, xin lỗi quý khách hàng !",
+//           });
+//         }
+
+//         if (order.status !== "pending" && order.status !== "processing") {
+//           return res.status(400).json({
+//             success: false,
+//             message:
+//               "Đơn hàng đã xử lý không thể hủy, xin lỗi quý khách hàng !",
+//           });
+//         }
+
+//         order.status = "cancelled";
+//         order.cancelReason = cancelReason || "";
+//         break;
+
+//       case "delivered":
+//         if (order.status !== "shipping") {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Đơn hàng chưa được giao không thể hoàn thành",
+//           });
+//         }
+
+//         order.status = "delivered";
+//         break;
+
+//       case "pending":
+//         if (order.status !== "cancelled") {
+//           return res.status(400).json({
+//             success: false,
+//             message: "Chỉ có thể mua lại đơn hàng đã hủy",
+//           });
+//         }
+
+//         order.status = "pending";
+//         order.cancelReason = "";
+//         break;
+
+//       default:
+//         return res.status(400).json({
+//           success: false,
+//           message: "Trạng thái đơn hàng không hợp lệ",
+//         });
+//     }
+
+//     await order.save();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: `Cập nhật đơn hàng thành công`,
+//       order,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Có lỗi xảy ra khi cập nhật đơn hàng",
+//       error: error.message,
+//     });
+//   }
+// };
 export const updateStatusOrderByUser = async (req, res) => {
   try {
-    const id = req.params.id;
+    const { id } = req.params;
     const { status, cancelReason } = req.body;
+    const user = req.user;
 
     const order = await Order.findById(id);
-
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -682,70 +820,206 @@ export const updateStatusOrderByUser = async (req, res) => {
       });
     }
 
-    switch (status) {
-      case "cancelled":
-        if (order.paymentMethod !== "COD") {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Đơn hàng đã thanh toán không thể hủy, xin lỗi quý khách hàng !",
-          });
-        }
+    const allowedActions = {
+      cancelled: ["pending", "processing"],
+      pending: ["cancelled"],
+    };
 
-        if (order.status !== "pending" && order.status !== "processing") {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Đơn hàng đã xử lý không thể hủy, xin lỗi quý khách hàng !",
-          });
-        }
+    if (!allowedActions[status]?.includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Không thể thực hiện thao tác này",
+      });
+    }
 
-        order.status = "cancelled";
-        order.cancelReason = cancelReason || "";
-        break;
-
-      case "delivered":
-        if (order.status !== "shipping") {
-          return res.status(400).json({
-            success: false,
-            message: "Đơn hàng chưa được giao không thể hoàn thành",
-          });
-        }
-
-        order.status = "delivered";
-        break;
-
-      case "pending":
-        if (order.status !== "cancelled") {
-          return res.status(400).json({
-            success: false,
-            message: "Chỉ có thể mua lại đơn hàng đã hủy",
-          });
-        }
-
-        order.status = "pending";
-        order.cancelReason = "";
-        break;
-
-      default:
+    if (status === "cancelled") {
+      if (order.paymentMethod !== "COD") {
         return res.status(400).json({
           success: false,
-          message: "Trạng thái đơn hàng không hợp lệ",
+          message: "Đơn hàng đã thanh toán không thể hủy",
         });
+      }
+
+      if (!cancelReason?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng cung cấp lý do hủy đơn hàng",
+        });
+      }
+
+      const restoreResult = await restoreProductQuantity(order.products);
+      if (!restoreResult.success) {
+        return res.status(400).json({
+          success: false,
+          message: "Không thể hoàn lại số lượng sản phẩm",
+        });
+      }
+
+      order.cancelReason = cancelReason.trim();
+      order.status = "cancelled";
+      order.statusHistory.push({
+        prevStatus: order.status,
+        status: "cancelled",
+        updatedBy: user._id,
+        updatedByModel: "User",
+        date: new Date(),
+      });
+    } else if (status === "pending") {
+      order.cancelReason = "";
+      order.status = "pending";
+      order.statusHistory.push({
+        prevStatus: "cancelled",
+        status: "pending",
+        updatedBy: user._id,
+        updatedByModel: "User",
+        date: new Date(),
+      });
     }
 
     await order.save();
 
+    const populatedOrder = await Order.findById(order._id)
+      .populate("user", "name email")
+      .populate({
+        path: "statusHistory.updatedBy",
+        select: "name email",
+        model: mongoose.model("User"),
+      });
+
     return res.status(200).json({
       success: true,
-      message: `Cập nhật đơn hàng thành công`,
-      order,
+      message:
+        status === "cancelled"
+          ? "Hủy đơn hàng thành công"
+          : "Đặt lại đơn hàng thành công",
+      data: populatedOrder,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Update order error:", error);
     return res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi cập nhật đơn hàng",
+      error: error.message,
+    });
+  }
+};
+
+export const updateStatusOrderByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, cancelReason } = req.body;
+    const admin = req.admin;
+
+    const order = await Order.findById(id).populate("user", "name email");
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    if (order.status === "delivered" || order.status === "cancelled") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Không thể thay đổi trạng thái đơn hàng đã hoàn thành hoặc đã hủy",
+      });
+    }
+
+    const validTransitions = {
+      pending: ["processing", "cancelled"],
+      processing: ["shipping", "cancelled"],
+      shipping: ["delivered", "cancelled"],
+    };
+
+    if (
+      status !== "cancelled" &&
+      !validTransitions[order.status]?.includes(status)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: `Không thể chuyển trạng thái từ ${order.status} sang ${status}`,
+      });
+    }
+
+    switch (status) {
+      case "cancelled":
+        if (!cancelReason?.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: "Vui lòng cung cấp lý do hủy đơn hàng",
+          });
+        }
+
+        if (["pending", "processing"].includes(order.status)) {
+          const restoreResult = await restoreProductQuantity(order.products);
+          if (!restoreResult.success) {
+            return res.status(400).json({
+              success: false,
+              message: "Không thể hoàn lại số lượng sản phẩm",
+            });
+          }
+        }
+
+        order.cancelReason = cancelReason.trim();
+        break;
+    }
+
+    const prevStatus = order.status;
+    order.status = status;
+    order.statusHistory.push({
+      prevStatus,
+      status,
+      updatedBy: admin._id,
+      updatedByModel: "Admin",
+      date: new Date(),
+    });
+
+    await order.save();
+
+    const populatedOrder = await Order.findById(order._id)
+      .populate("user", "name email")
+      .populate({
+        path: "statusHistory.updatedBy",
+        select: "name username",
+        model: mongoose.model("Admin"),
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: `Cập nhật trạng thái đơn hàng thành công: ${status}`,
+      data: populatedOrder,
+    });
+  } catch (error) {
+    console.error("Update order status error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi xảy ra khi cập nhật trạng thái đơn hàng",
+      error: error.message,
+    });
+  }
+};
+
+export const removeOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedOrder = await Order.findByIdAndDelete(id);
+
+    if (!deletedOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Đơn hàng không tồn tại",
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Xóa đơn hàng thành công",
+      data: deletedOrder,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Có lỗi khi xóa đơn hàng",
       error: error.message,
     });
   }

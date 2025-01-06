@@ -448,26 +448,6 @@ export const getAllBookingByCustomer = async (req, res) => {
       filter.status = status;
     }
 
-    // Get bookings with pagination
-    // const [bookings, total, statusCounts] = await Promise.all([
-    //   Booking.find(filter)
-    //     .populate("doctor", "name email phone avatar specialty")
-    //     .populate("clinic", "name logo address")
-    //     .sort({ createdAt: -1 })
-    //     .skip((page - 1) * pageSize)
-    //     .limit(pageSize),
-    //   Booking.countDocuments(filter),
-    //   Booking.aggregate([
-    //     { $match: { user: userId } },
-    //     {
-    //       $group: {
-    //         _id: "$status",
-    //         count: { $sum: 1 },
-    //       },
-    //     },
-    //   ]),
-    // ]);
-
     const [bookings, total, statusCounts, reviewedBookings] = await Promise.all(
       [
         Booking.find(filter)

@@ -38,8 +38,8 @@ router.post(
 );
 router.post("/vnpay-return", authMiddlewareUser, orderVnpayReturn);
 router.get("/stripe-return", authMiddlewareUser, orderStripeReturn);
-router.put("/:id", authMiddlewareUser, updateOrderByUser);
 router.get("/", authMiddlewareUser, getOrderByUser);
+router.put("/:id", authMiddlewareUser, updateOrderByUser);
 router.put("/status/:id", authMiddlewareUser, updateStatusOrderByUser);
 
 export default router;
