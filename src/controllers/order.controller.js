@@ -39,7 +39,6 @@ export const createOrderCod = async (req, res) => {
       province,
       district,
       ward,
-      // totalAmount,
       note,
     } = req.body;
 
@@ -70,6 +69,12 @@ export const createOrderCod = async (req, res) => {
       paymentMethod: "COD",
       totalAmount,
       note: note || "KHÔNG CÓ",
+      statusHistory: [{
+        status: "pending",
+        updatedBy: user._id,
+        updatedByModel: "User", 
+        date: new Date()
+      }]
     });
 
     // Lưu đơn hàng
@@ -139,6 +144,12 @@ export const createOrderVnpay = async (req, res) => {
       totalAmount,
       note: note || "KHÔNG CÓ",
       status: "pending",
+      statusHistory: [{
+        status: "pending",
+        updatedBy: user._id,
+        updatedByModel: "User", 
+        date: new Date()
+      }]
     });
 
     await newOrder.save({ session });
@@ -325,6 +336,12 @@ export const createOrderStripe = async (req, res) => {
       paymentMethod: "STRIPE",
       totalAmount,
       note: note || "KHÔNG CÓ",
+      statusHistory: [{
+        status: "pending",
+        updatedBy: user._id,
+        updatedByModel: "User", 
+        date: new Date()
+      }]
     };
 
     const orderSession = await OrderSession.create([orderSessionData], {
@@ -724,88 +741,6 @@ export const getOrderDetails = async (req, res) => {
   }
 };
 
-// export const updateStatusOrderByUser = async (req, res) => {
-//   try {
-//     const id = req.params.id;
-//     const { status, cancelReason } = req.body;
-
-//     const order = await Order.findById(id);
-
-//     if (!order) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Đơn hàng không tồn tại",
-//       });
-//     }
-
-//     switch (status) {
-//       case "cancelled":
-//         if (order.paymentMethod !== "COD") {
-//           return res.status(400).json({
-//             success: false,
-//             message:
-//               "Đơn hàng đã thanh toán không thể hủy, xin lỗi quý khách hàng !",
-//           });
-//         }
-
-//         if (order.status !== "pending" && order.status !== "processing") {
-//           return res.status(400).json({
-//             success: false,
-//             message:
-//               "Đơn hàng đã xử lý không thể hủy, xin lỗi quý khách hàng !",
-//           });
-//         }
-
-//         order.status = "cancelled";
-//         order.cancelReason = cancelReason || "";
-//         break;
-
-//       case "delivered":
-//         if (order.status !== "shipping") {
-//           return res.status(400).json({
-//             success: false,
-//             message: "Đơn hàng chưa được giao không thể hoàn thành",
-//           });
-//         }
-
-//         order.status = "delivered";
-//         break;
-
-//       case "pending":
-//         if (order.status !== "cancelled") {
-//           return res.status(400).json({
-//             success: false,
-//             message: "Chỉ có thể mua lại đơn hàng đã hủy",
-//           });
-//         }
-
-//         order.status = "pending";
-//         order.cancelReason = "";
-//         break;
-
-//       default:
-//         return res.status(400).json({
-//           success: false,
-//           message: "Trạng thái đơn hàng không hợp lệ",
-//         });
-//     }
-
-//     await order.save();
-
-//     return res.status(200).json({
-//       success: true,
-//       message: `Cập nhật đơn hàng thành công`,
-//       order,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Có lỗi xảy ra khi cập nhật đơn hàng",
-//       error: error.message,
-//     });
-//   }
-// };
 export const updateStatusOrderByUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -831,6 +766,9 @@ export const updateStatusOrderByUser = async (req, res) => {
         message: "Không thể thực hiện thao tác này",
       });
     }
+
+    // Store the current status before any changes
+    const currentStatus = order.status;
 
     if (status === "cancelled") {
       if (order.paymentMethod !== "COD") {
@@ -858,7 +796,7 @@ export const updateStatusOrderByUser = async (req, res) => {
       order.cancelReason = cancelReason.trim();
       order.status = "cancelled";
       order.statusHistory.push({
-        prevStatus: order.status,
+        prevStatus: currentStatus,
         status: "cancelled",
         updatedBy: user._id,
         updatedByModel: "User",
@@ -868,7 +806,7 @@ export const updateStatusOrderByUser = async (req, res) => {
       order.cancelReason = "";
       order.status = "pending";
       order.statusHistory.push({
-        prevStatus: "cancelled",
+        prevStatus: currentStatus, 
         status: "pending",
         updatedBy: user._id,
         updatedByModel: "User",
@@ -918,6 +856,9 @@ export const updateStatusOrderByAdmin = async (req, res) => {
       });
     }
 
+    // Store the current status before any changes
+    const prevStatus = order.status;
+
     if (order.status === "delivered" || order.status === "cancelled") {
       return res.status(400).json({
         success: false,
@@ -965,7 +906,6 @@ export const updateStatusOrderByAdmin = async (req, res) => {
         break;
     }
 
-    const prevStatus = order.status;
     order.status = status;
     order.statusHistory.push({
       prevStatus,
