@@ -758,6 +758,7 @@ export const updateStatusOrderByUser = async (req, res) => {
     const allowedActions = {
       cancelled: ["pending", "processing"],
       pending: ["cancelled"],
+      delivered: ["shipping"],
     };
 
     if (!allowedActions[status]?.includes(order.status)) {
@@ -806,8 +807,17 @@ export const updateStatusOrderByUser = async (req, res) => {
       order.cancelReason = "";
       order.status = "pending";
       order.statusHistory.push({
-        prevStatus: currentStatus, 
+        prevStatus: currentStatus,
         status: "pending",
+        updatedBy: user._id,
+        updatedByModel: "User",
+        date: new Date(),
+      });
+    } else if (status === "delivered") {
+      order.status = "delivered";
+      order.statusHistory.push({
+        prevStatus: currentStatus,
+        status: "delivered",
         updatedBy: user._id,
         updatedByModel: "User",
         date: new Date(),
@@ -824,12 +834,24 @@ export const updateStatusOrderByUser = async (req, res) => {
         model: mongoose.model("User"),
       });
 
+    let message = "";
+    switch (status) {
+      case "cancelled":
+        message = "Hủy đơn hàng thành công";
+        break;
+      case "pending":
+        message = "Đặt lại đơn hàng thành công";
+        break;
+      case "delivered":
+        message = "Xác nhận đã nhận hàng thành công";
+        break;
+      default:
+        message = "Cập nhật trạng thái đơn hàng thành công";
+    }
+
     return res.status(200).json({
       success: true,
-      message:
-        status === "cancelled"
-          ? "Hủy đơn hàng thành công"
-          : "Đặt lại đơn hàng thành công",
+      message,
       data: populatedOrder,
     });
   } catch (error) {
@@ -927,7 +949,7 @@ export const updateStatusOrderByAdmin = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Cập nhật trạng thái đơn hàng thành công: ${status}`,
+      message: "Cập nhật trạng thái đơn hàng thành công",
       data: populatedOrder,
     });
   } catch (error) {
