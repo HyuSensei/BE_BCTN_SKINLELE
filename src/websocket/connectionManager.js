@@ -36,3 +36,13 @@ export const getUserBySocketId = (socketId) => {
 export const getAllSocketsForUser = (userId) => {
   return connections.get(userId) || [];
 };
+
+export const getAdminSocketIds = (io) => {
+  const adminSocketIds = [];
+  for (const [socketId, socket] of io.sockets.sockets) {
+    if (socket.userType === "admin") {
+      adminSocketIds.push(socketId);
+    }
+  }
+  return adminSocketIds;
+};

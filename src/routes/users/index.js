@@ -8,6 +8,7 @@ import reviewRoutes from "./review.user-route.js";
 import doctorRoutes from "./doctor.user-route.js";
 import bookingRoutes from "./booking.user-route.js";
 import clinicRoutes from "./clinic.user-route.js";
+import notificationRoutes from "./notification.user-route.js";
 
 const router = express.Router();
 
@@ -20,5 +21,6 @@ router.use("/reviews", reviewRoutes);
 router.use("/doctors", doctorRoutes);
 router.use("/bookings", bookingRoutes);
 router.use("/clinics", clinicRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;
