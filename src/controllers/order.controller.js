@@ -31,16 +31,8 @@ export const createOrderCod = async (req, res) => {
   session.startTransaction();
   try {
     const user = req.user;
-    const {
-      name,
-      products,
-      phone,
-      address,
-      province,
-      district,
-      ward,
-      note,
-    } = req.body;
+    const { name, products, phone, address, province, district, ward, note } =
+      req.body;
 
     // Validate đơn hàng
     const validationErrors = await validateOrder(products);
@@ -69,12 +61,14 @@ export const createOrderCod = async (req, res) => {
       paymentMethod: "COD",
       totalAmount,
       note: note || "KHÔNG CÓ",
-      statusHistory: [{
-        status: "pending",
-        updatedBy: user._id,
-        updatedByModel: "User", 
-        date: new Date()
-      }]
+      statusHistory: [
+        {
+          status: "pending",
+          updatedBy: user._id,
+          updatedByModel: "User",
+          date: new Date(),
+        },
+      ],
     });
 
     // Lưu đơn hàng
@@ -144,12 +138,14 @@ export const createOrderVnpay = async (req, res) => {
       totalAmount,
       note: note || "KHÔNG CÓ",
       status: "pending",
-      statusHistory: [{
-        status: "pending",
-        updatedBy: user._id,
-        updatedByModel: "User", 
-        date: new Date()
-      }]
+      statusHistory: [
+        {
+          status: "pending",
+          updatedBy: user._id,
+          updatedByModel: "User",
+          date: new Date(),
+        },
+      ],
     });
 
     await newOrder.save({ session });
@@ -336,12 +332,14 @@ export const createOrderStripe = async (req, res) => {
       paymentMethod: "STRIPE",
       totalAmount,
       note: note || "KHÔNG CÓ",
-      statusHistory: [{
-        status: "pending",
-        updatedBy: user._id,
-        updatedByModel: "User", 
-        date: new Date()
-      }]
+      statusHistory: [
+        {
+          status: "pending",
+          updatedBy: user._id,
+          updatedByModel: "User",
+          date: new Date(),
+        },
+      ],
     };
 
     const orderSession = await OrderSession.create([orderSessionData], {
@@ -983,6 +981,39 @@ export const removeOrder = async (req, res) => {
       success: false,
       message: "Có lỗi khi xóa đơn hàng",
       error: error.message,
+    });
+  }
+};
+
+export const getOrderDetailByUser = async (req, res) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+    const order = await Order.findOne({
+      _id: id,
+      user: user._id,
+    }).populate({
+      path: "statusHistory.updatedBy",
+      select: "name",
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        data: null,
+        message: "Không tìm thấy đơn hàng",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: order,
+    });
+  } catch (error) {
+    console.log("Error get order detail", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

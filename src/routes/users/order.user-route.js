@@ -10,6 +10,7 @@ import {
   orderVnpayReturn,
   updateOrderByUser,
   updateStatusOrderByUser,
+  getOrderDetailByUser,
 } from "../../controllers/order.controller.js";
 import { validateMiddleWare } from "../../middleware/validate.middleware.js";
 
@@ -39,6 +40,7 @@ router.post(
 router.post("/vnpay-return", authMiddlewareUser, orderVnpayReturn);
 router.get("/stripe-return", authMiddlewareUser, orderStripeReturn);
 router.get("/", authMiddlewareUser, getOrderByUser);
+router.get("/detail/:id", authMiddlewareUser, getOrderDetailByUser);
 router.put("/:id", authMiddlewareUser, updateOrderByUser);
 router.put("/status/:id", authMiddlewareUser, updateStatusOrderByUser);
 

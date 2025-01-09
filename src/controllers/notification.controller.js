@@ -1,8 +1,10 @@
+import Notification from "../models/notification.model.js";
+
 export const getNotificationsByUser = async (req, res) => {
   try {
     const { type = "STORE" } = req.query;
     const page = parseInt(req.query.page) || 1;
-    const limit = 15;
+    const limit = parseInt(req.query.limit) || 10;
     const user = req.user;
 
     const filter = {
@@ -51,7 +53,7 @@ export const getNotificationsByDoctor = async (req, res) => {
   try {
     const { type = "BOOKING" } = req.query;
     const page = parseInt(req.query.page) || 1;
-    const limit = 15;
+    const limit = parseInt(req.query.limit) || 10;
     const doctor = req.user;
 
     const filter = {

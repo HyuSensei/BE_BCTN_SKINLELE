@@ -8,7 +8,7 @@ export const handleNotificationEvents = (io, socket) => {
   socket.on("createOrder", async (data) => {
     const { recipient, model, order } = JSON.parse(data);
     const noti = await createNotiByOrder({ recipient, model, order });
-    socket.emit("resCreateOrder", noti);
+    socket.emit("resNewNotiFromStore", noti);
   });
 
   socket.on("updateOrderStatus", async (data) => {
@@ -19,9 +19,9 @@ export const handleNotificationEvents = (io, socket) => {
       order,
     });
 
-    const receiverSockets = getAllSocketsForUser(recipient._id);
-    receiverSockets.forEach((receiverSocket) => {
-      receiverSocket.emit("resUpdateOrderStatus", noti);
+    const receiverSockets = getAllSocketsForUser(recipient);
+    receiverSockets.forEach((socketId) => {
+      io.to(socketId).emit("resNewNotiFromStore", noti);
     });
   });
 };
