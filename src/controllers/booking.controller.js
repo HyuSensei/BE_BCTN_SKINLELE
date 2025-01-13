@@ -344,9 +344,13 @@ export const removeBooking = async (req, res) => {
 export const getBookingDetail = async (req, res) => {
   try {
     const { id } = req.params;
-    const booking = await Booking.findById(id)
+    const user = req.user;
+    const booking = await Booking.findOne({
+      _id: id,
+      user: user._id,
+    })
       .populate("user", "name email")
-      .populate("doctor", "name email phone")
+      .populate("doctor", "name email phone avatar specialty")
       .populate("clinic", "name logo address slug");
 
     if (!booking) {
