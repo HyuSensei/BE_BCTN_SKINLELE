@@ -115,7 +115,7 @@ export const createOrderVnpay = async (req, res) => {
     if (validationErrors.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Đơn hàng không hợp lệ",
+        message: validationErrors[0] || "Đơn hàng không hợp lệ",
         errors: validationErrors,
       });
     }
@@ -310,7 +310,7 @@ export const createOrderStripe = async (req, res) => {
     if (validationErrors.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Đơn hàng không hợp lệ",
+        message: validationErrors[0] || "Đơn hàng không hợp lệ",
         errors: validationErrors,
       });
     }
