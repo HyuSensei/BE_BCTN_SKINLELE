@@ -71,14 +71,30 @@ export const createNotiByUpdateStatusOrder = async ({
 
 export const createNotiByBooking = async ({ recipient, model, booking }) => {
   try {
-    const payload = {
-      title: "🏥 Lịch khám mới",
-      content: `Lịch khám BK${booking._id} đã được đặt thành công, cảm ơn quý khách đã tin tưởng ❤️`,
-      type: "BOOKING",
-      metadata: {
-        link: `/booking-detail/${booking._id}`,
-      },
-    };
+    let payload;
+
+    if (model === "User") {
+      payload = {
+        title: "🏥 Đặt lịch thành công",
+        content: `Lịch khám BK${booking._id} đã được đặt thành công. Vui lòng chờ bác sĩ xác nhận!`,
+        type: "BOOKING",
+        metadata: {
+          link: `/booking-detail/${booking._id}`,
+        },
+      };
+    } else if (model === "Doctor") {
+      payload = {
+        title: "🏥 Lịch khám mới",
+        content: `Bạn có lịch khám mới BK${booking._id} từ ${booking.customer.name}`,
+        type: "BOOKING",
+        metadata: {
+          link: `/doctor-owner?tab=bookings&id=${booking._id}`,
+        },
+      };
+    }
+
+    if (!payload) return null;
+
     const noti = await Notification.create({ recipient, model, ...payload });
     return noti;
   } catch (error) {
@@ -93,37 +109,62 @@ export const createNotiByUpdateStatusBooking = async ({
   booking,
 }) => {
   try {
-    let title, content;
+    let payload;
 
-    switch (booking.status) {
-      case "confirmed":
-        title = "✅ Xác nhận lịch khám";
-        content = `Lịch khám BK${booking._id} đã được xác nhận. Vui lòng đến đúng giờ!`;
-        break;
+    if (model === "User") {
+      switch (booking.status) {
+        case "confirmed":
+          payload = {
+            title: "✅ Lịch khám được xác nhận",
+            content: `Bác sĩ đã xác nhận lịch khám BK${booking._id}. Vui lòng đến đúng giờ!`,
+            type: "BOOKING",
+            metadata: {
+              link: `/booking-detail/${booking._id}`,
+            },
+          };
+          break;
 
-      case "completed":
-        title = "🎉 Hoàn thành khám";
-        content = `Lịch khám BK${booking._id} đã hoàn thành. Cảm ơn quý khách đã tin tưởng ❤️`;
-        break;
+        case "completed":
+          payload = {
+            title: "🎉 Hoàn thành khám",
+            content: `Lịch khám BK${booking._id} đã hoàn thành. Cảm ơn bạn đã tin tưởng ❤️`,
+            type: "BOOKING",
+            metadata: {
+              link: `/booking-detail/${booking._id}`,
+            },
+          };
+          break;
 
-      case "cancelled":
-        title = "❌ Hủy lịch khám";
-        content = `Lịch khám BK${booking._id} đã bị hủy. Lý do: ${booking.cancelReason}`;
-        break;
-
-      default:
-        return null;
+        case "cancelled":
+          if (booking.cancelReason) {
+            payload = {
+              title: "❌ Lịch khám bị hủy",
+              content: `Lịch khám BK${booking._id} đã bị hủy. Lý do: ${booking.cancelReason}`,
+              type: "BOOKING",
+              metadata: {
+                link: `/booking-detail/${booking._id}`,
+              },
+            };
+          }
+          break;
+      }
+    } else if (model === "Doctor" && booking.status === "cancelled") {
+      payload = {
+        title: "❌ Lịch khám bị hủy",
+        content: `Bệnh nhân ${booking.customer.name} đã hủy lịch khám BK${booking._id}. Lý do: ${booking.cancelReason}`,
+        type: "BOOKING",
+        metadata: {
+          link: `/doctor-owner?tab=bookings&id=${booking._id}`,
+        },
+      };
     }
+
+    if (!payload) return null;
 
     const noti = await Notification.create({
       recipient,
       model,
-      type: "BOOKING", 
-      title,
-      content,
-      metadata: {
-        link: `/booking-detail/${booking._id}`,
-      },
+      ...payload,
     });
 
     return noti;

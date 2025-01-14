@@ -7,6 +7,7 @@ import { addConnection, removeConnection } from "./connectionManager.js";
 import { handleChatEvents } from "./handlers/chatHandler.js";
 import { getOnlineUsers } from "./connectionManager.js";
 import { handleNotificationEvents } from "./handlers/notificationHandle.js";
+import { handleCallEvents } from "./handlers/handleCallEvents.js";
 
 const app = express();
 
@@ -47,6 +48,8 @@ io.on("connection", (client) => {
   handleChatEvents(io, client);
 
   handleNotificationEvents(io, client);
+
+  handleCallEvents(io, client);
 
   //Disconnect socket
   client.on("disconnect", () => {
