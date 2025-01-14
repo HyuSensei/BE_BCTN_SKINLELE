@@ -68,3 +68,67 @@ export const createNotiByUpdateStatusOrder = async ({
     return null;
   }
 };
+
+export const createNotiByBooking = async ({ recipient, model, booking }) => {
+  try {
+    const payload = {
+      title: "🏥 Lịch khám mới",
+      content: `Lịch khám BK${booking._id} đã được đặt thành công, cảm ơn quý khách đã tin tưởng ❤️`,
+      type: "BOOKING",
+      metadata: {
+        link: `/booking-detail/${booking._id}`,
+      },
+    };
+    const noti = await Notification.create({ recipient, model, ...payload });
+    return noti;
+  } catch (error) {
+    console.log("Error create notification booking: ", error);
+    return null;
+  }
+};
+
+export const createNotiByUpdateStatusBooking = async ({
+  recipient,
+  model,
+  booking,
+}) => {
+  try {
+    let title, content;
+
+    switch (booking.status) {
+      case "confirmed":
+        title = "✅ Xác nhận lịch khám";
+        content = `Lịch khám BK${booking._id} đã được xác nhận. Vui lòng đến đúng giờ!`;
+        break;
+
+      case "completed":
+        title = "🎉 Hoàn thành khám";
+        content = `Lịch khám BK${booking._id} đã hoàn thành. Cảm ơn quý khách đã tin tưởng ❤️`;
+        break;
+
+      case "cancelled":
+        title = "❌ Hủy lịch khám";
+        content = `Lịch khám BK${booking._id} đã bị hủy. Lý do: ${booking.cancelReason}`;
+        break;
+
+      default:
+        return null;
+    }
+
+    const noti = await Notification.create({
+      recipient,
+      model,
+      type: "BOOKING", 
+      title,
+      content,
+      metadata: {
+        link: `/booking-detail/${booking._id}`,
+      },
+    });
+
+    return noti;
+  } catch (error) {
+    console.log("Error create notification update booking: ", error);
+    return null;
+  }
+};
