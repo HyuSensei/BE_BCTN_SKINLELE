@@ -350,7 +350,7 @@ export const getBookingDetail = async (req, res) => {
       user: user._id,
     })
       .populate("user", "name email")
-      .populate("doctor", "name email phone avatar specialty")
+      .populate("doctor", "name email phone avatar specialty slug")
       .populate("clinic", "name logo address slug");
 
     if (!booking) {
