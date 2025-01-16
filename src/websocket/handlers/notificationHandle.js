@@ -28,23 +28,20 @@ export const handleNotificationEvents = (io, socket) => {
   });
 
   socket.on("createBooking", async (data) => {
-    const { recipient, model, booking } = JSON.parse(data);
-    const noti = await createNotiByBooking({ recipient, model, booking });
-    
-    socket.emit("resNewNotiFromBooking", noti);
-
-    const receiverSockets = getAllSocketsForUser(booking.doctor);
+    const { booking } = JSON.parse(data);
+    const { notiCustomer, notiDoctor } = await createNotiByBooking({ booking });
+    socket.emit("resNewNotiFromBooking", notiCustomer);
+    const receiverSockets = getAllSocketsForUser(booking.doctor._id);
     receiverSockets.forEach((socketId) => {
-      io.to(socketId).emit("resNewNotiFromBooking", noti);
+      io.to(socketId).emit("resNewNotiFromBooking", notiDoctor);
     });
   });
-
 
   socket.on("updateBookingStatus", async (data) => {
     const { recipient, model, booking } = JSON.parse(data);
     const noti = await createNotiByUpdateStatusBooking({
       recipient,
-      model, 
+      model,
       booking,
     });
 

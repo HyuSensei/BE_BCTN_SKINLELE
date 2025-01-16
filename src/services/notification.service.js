@@ -69,34 +69,39 @@ export const createNotiByUpdateStatusOrder = async ({
   }
 };
 
-export const createNotiByBooking = async ({ recipient, model, booking }) => {
+export const createNotiByBooking = async ({ booking }) => {
   try {
-    let payload;
+    const payloadCustomer = {
+      title: "🏥 Đặt lịch thành công",
+      content: `Lịch khám BK${booking._id} đã được đặt thành công. Vui lòng chờ bác sĩ xác nhận!`,
+      type: "BOOKING",
+      metadata: {
+        link: `/booking-detail/${booking._id}`,
+      },
+    };
 
-    if (model === "User") {
-      payload = {
-        title: "🏥 Đặt lịch thành công",
-        content: `Lịch khám BK${booking._id} đã được đặt thành công. Vui lòng chờ bác sĩ xác nhận!`,
-        type: "BOOKING",
-        metadata: {
-          link: `/booking-detail/${booking._id}`,
-        },
-      };
-    } else if (model === "Doctor") {
-      payload = {
-        title: "🏥 Lịch khám mới",
-        content: `Bạn có lịch khám mới BK${booking._id} từ ${booking.customer.name}`,
-        type: "BOOKING",
-        metadata: {
-          link: `/doctor-owner?tab=bookings&id=${booking._id}`,
-        },
-      };
-    }
+    const payloadDoctor = {
+      title: "🏥 Lịch khám mới",
+      content: `Bạn có lịch khám mới BK${booking._id} từ ${booking.customer.name}`,
+      type: "BOOKING",
+      metadata: {
+        link: `/doctor-owner?tab=bookings&id=${booking._id}`,
+      },
+    };
 
-    if (!payload) return null;
-
-    const noti = await Notification.create({ recipient, model, ...payload });
-    return noti;
+    const [notiCustomer, notiDoctor] = await Promise.all([
+      Notification.create({
+        recipient: booking.user,
+        model: "User",
+        ...payloadCustomer,
+      }),
+      Notification.create({
+        recipient: booking.doctor._id,
+        model: "Doctor",
+        ...payloadDoctor,
+      }),
+    ]);
+    return { notiCustomer, notiDoctor };
   } catch (error) {
     console.log("Error create notification booking: ", error);
     return null;

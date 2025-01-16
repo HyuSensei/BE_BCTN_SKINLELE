@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { convertToVietnameseDay } from "../helpers/convert.js";
 import Booking from "../models/booking.model.js";
 import Clinic from "../models/clinic.model.js";
@@ -382,10 +383,15 @@ export const getAllBookingByDoctor = async (req, res) => {
       fromDate,
       toDate,
       search,
+      bookingId,
     } = req.query;
     const doctorId = req.user._id;
 
     let filter = { doctor: doctorId };
+
+    if (bookingId) {
+      filter._id = new mongoose.Types.ObjectId(`${bookingId}`);
+    }
 
     // Add status filter if provided
     if (status) {
