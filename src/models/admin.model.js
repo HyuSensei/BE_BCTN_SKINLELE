@@ -51,7 +51,9 @@ AdminSchema.pre("save", function (next) {
 const Admin = mongoose.model("Admin", AdminSchema);
 
 export const initializeAdmin = async () => {
-  const adminCount = await Admin.countDocuments();
+  const adminCount = await Admin.countDocuments({
+    role: "ADMIN",
+  });
   if (adminCount === 0) {
     const defaultAccounts = [
       {

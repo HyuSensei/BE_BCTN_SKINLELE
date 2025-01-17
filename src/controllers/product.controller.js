@@ -119,10 +119,6 @@ export const updateProduct = async (req, res) => {
 
     Object.assign(product, updateData);
 
-    console.log("====================================");
-    console.log(updateData);
-    console.log("====================================");
-
     const updatedProduct = await product.save();
 
     return res.status(200).json({

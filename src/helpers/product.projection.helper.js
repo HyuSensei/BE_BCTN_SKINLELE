@@ -44,7 +44,7 @@ export const promotionFields = {
 export const categoryFields = {
   categories: {
     $map: {
-      input: "$categoriesInfo",
+      input: "$categories",
       as: "cat",
       in: {
         _id: "$$cat._id",

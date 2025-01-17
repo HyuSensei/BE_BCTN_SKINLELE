@@ -2,6 +2,10 @@ import Review from "../models/review.model.js";
 import Product from "../models/product.model.js";
 import Order from "../models/order.model.js";
 
+const escapeRegex = (string) => {
+  return string.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+};
+
 export const createReview = async (req, res) => {
   try {
     const { order, product, rate, comment, images } = req.body;
@@ -73,7 +77,6 @@ export const createReview = async (req, res) => {
     });
   }
 };
-
 
 export const updateReview = async (req, res) => {
   try {
@@ -221,6 +224,7 @@ export const getReviewByAdmin = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 10;
     const { rate, customerName, productName, fromDate, toDate } = req.query;
     const skip = (page - 1) * pageSize;
+    const escapedProductName = productName ? escapeRegex(productName) : null;
 
     let matchStage = {};
 
@@ -260,8 +264,13 @@ export const getReviewByAdmin = async (req, res) => {
           ...(customerName
             ? { "userDetails.name": { $regex: customerName, $options: "i" } }
             : {}),
-          ...(productName
-            ? { "productDetails.name": { $regex: productName, $options: "i" } }
+          ...(escapedProductName
+            ? {
+                "productDetails.name": {
+                  $regex: escapedProductName,
+                  $options: "i",
+                },
+              }
             : {}),
         },
       },

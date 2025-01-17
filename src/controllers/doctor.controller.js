@@ -937,6 +937,9 @@ export const getDoctorRecommend = async (req, res) => {
       return new mongoose.Types.ObjectId(`${id.trim()}`);
     });
 
+    console.log(categoryObjectIds);
+    
+
     const skip = (parseInt(page) - 1) * parseInt(pageSize);
 
     const [doctors, total] = await Promise.all([
