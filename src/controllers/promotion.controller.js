@@ -84,8 +84,15 @@ export const getAllPromotions = async (req, res) => {
 
 export const createPromotion = async (req, res) => {
   try {
-    const { name, description, startDate, endDate, isActive, products } =
-      req.body;
+    const {
+      name,
+      description,
+      startDate,
+      endDate,
+      isActive,
+      products,
+      banner = null,
+    } = req.body;
 
     if (products && products.length > 0) {
       const productIds = products.map((p) => p.product);
@@ -106,6 +113,7 @@ export const createPromotion = async (req, res) => {
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       isActive,
+      banner,
       products: products.map((item) => ({
         product: item.product,
         discountPercentage: item.discountPercentage,
@@ -134,8 +142,15 @@ export const createPromotion = async (req, res) => {
 export const updatePromotion = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, startDate, endDate, isActive, products } =
-      req.body;
+    const {
+      name,
+      description,
+      startDate,
+      endDate,
+      isActive,
+      products,
+      banner = null,
+    } = req.body;
 
     const promotion = await Promotion.findById(id);
 
@@ -164,6 +179,7 @@ export const updatePromotion = async (req, res) => {
     promotion.startDate = startDate ? new Date(startDate) : promotion.startDate;
     promotion.endDate = endDate ? new Date(endDate) : promotion.endDate;
     promotion.isActive = isActive !== undefined ? isActive : promotion.isActive;
+    promotion.banner = banner || promotion.banner;
 
     if (products) {
       promotion.products = products.map((p) => {
@@ -222,6 +238,157 @@ export const deletePromotion = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Có lỗi xảy ra khi xóa khuyến mãi",
+      error: error.message,
+    });
+  }
+};
+
+export const getPromotionActive = async (req, res) => {
+  try {
+    const currentDate = new Date();
+
+    const promotions = await Promotion.aggregate([
+      {
+        $match: {
+          isActive: true,
+          startDate: { $lte: currentDate },
+          endDate: { $gt: currentDate },
+        },
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "products.product",
+          foreignField: "_id",
+          as: "productDetails",
+        },
+      },
+      {
+        $addFields: {
+          products: {
+            $map: {
+              input: "$products",
+              as: "item",
+              in: {
+                product: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: "$productDetails",
+                        as: "p",
+                        cond: { $eq: ["$$p._id", "$$item.product"] },
+                      },
+                    },
+                    0,
+                  ],
+                },
+                discountPercentage: "$$item.discountPercentage",
+                maxQty: "$$item.maxQty",
+                maxDiscountAmount: "$$item.maxDiscountAmount",
+                usedQty: "$$item.usedQty",
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          name: 1,
+          description: 1,
+          banner: 1,
+          startDate: 1,
+          endDate: 1,
+          products: {
+            $map: {
+              input: "$products",
+              as: "item",
+              in: {
+                product: {
+                  _id: "$$item.product._id",
+                  name: "$$item.product.name",
+                  mainImage: "$$item.product.mainImage",
+                  price: "$$item.product.price",
+                  enable: "$$item.product.enable",
+                },
+                discountPercentage: "$$item.discountPercentage",
+                maxQty: "$$item.maxQty",
+                maxDiscountAmount: "$$item.maxDiscountAmount",
+                usedQty: "$$item.usedQty",
+                discountedPrice: {
+                  $round: [
+                    {
+                      $subtract: [
+                        "$$item.product.price",
+                        {
+                          $multiply: [
+                            "$$item.product.price",
+                            { $divide: ["$$item.discountPercentage", 100] },
+                          ],
+                        },
+                      ],
+                    },
+                    0,
+                  ],
+                },
+                remaining: {
+                  $subtract: [
+                    "$$item.maxQty",
+                    { $ifNull: ["$$item.usedQty", 0] },
+                  ],
+                },
+              },
+            },
+          },
+          remainingTime: {
+            $subtract: ["$endDate", currentDate],
+          },
+          totalProducts: { $size: "$products" },
+          availableProducts: {
+            $size: {
+              $filter: {
+                input: "$products",
+                as: "item",
+                cond: {
+                  $gt: [
+                    {
+                      $subtract: [
+                        "$$item.maxQty",
+                        { $ifNull: ["$$item.usedQty", 0] },
+                      ],
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $match: {
+          availableProducts: { $gt: 0 },
+          products: {
+            $elemMatch: {
+              "product.enable": true,
+              remaining: { $gt: 0 },
+            },
+          },
+        },
+      },
+      {
+        $sort: { startDate: -1 },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: promotions,
+    });
+  } catch (error) {
+    console.error("Error getting active promotions:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
       error: error.message,
     });
   }

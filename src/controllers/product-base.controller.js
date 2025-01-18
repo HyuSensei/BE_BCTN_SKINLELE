@@ -13,8 +13,6 @@ import {
 } from "../helpers/promotion.helper.js";
 
 import {
-  getReviewLookupStage,
-  getReviewFieldsStage,
   getReviewLookupStagePro,
   getReviewFieldsStagePro,
 } from "../helpers/review.helper.js";
@@ -22,6 +20,10 @@ import {
 import { getCategoryProjectStage } from "../helpers/category.helper.js";
 import { getFullProjectStage } from "../helpers/product.projection.helper.js";
 import Review from "../models/review.model.js";
+
+const escapeRegex = (string) => {
+  return string.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+};
 
 const projectFileds = {
   $project: {
@@ -474,10 +476,11 @@ export const getAllProduct = async (req, res) => {
     const pageSize = parseInt(req.query.pageSize) || 12;
     const { name, category, brand, tag, sort } = req.query;
     const skip = (page - 1) * pageSize;
+    const escapedProductName = productName ? escapeRegex(productName) : null;
 
     let filter = {};
     if (name) {
-      filter.name = { $regex: name, $options: "i" };
+      filter.name = { $regex: escapedProductName, $options: "i" };
     }
     if (category) {
       filter.categories = category;

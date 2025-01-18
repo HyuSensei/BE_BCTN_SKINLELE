@@ -18,28 +18,13 @@ export const ContactSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    type: {
-      enum: ["clinic", "store"],
-      default: "store",
+    isReply: {
+      type: Boolean,
+      default: false,
     },
-    status: {
-      type: String,
-      enum: ["pending", "completed"],
-      default: "pending",
-    },
-    clinicInfo: {
-      name: {
-        type: String,
-        trim: true,
-      },
-      address: {
-        type: String,
-        trim: true,
-      },
-      phone: {
-        type: String,
-        trim: true,
-      },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
     },
   },
   { timestamps: true }
