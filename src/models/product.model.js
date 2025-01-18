@@ -40,6 +40,10 @@ export const ProductSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    cost: {
+      type: Number,
+      required: true,
+    },
     description: {
       type: String,
       required: true,
@@ -135,7 +139,6 @@ ProductSchema.pre("save", function (next) {
   next();
 });
 
-
 ProductSchema.pre("validate", function (next) {
   if (this.variants && this.variants.length > 0) {
     for (const variant of this.variants) {
@@ -153,5 +156,55 @@ ProductSchema.pre("validate", function (next) {
 });
 
 const Product = mongoose.model("Product", ProductSchema);
+
+export const initializeProductCosts = async () => {
+  try {
+    // Find all products that don't have a cost set
+    const products = await Product.find({ cost: { $exists: false } });
+
+    if (products.length === 0) {
+      console.log("No products found needing cost initialization");
+      return;
+    }
+
+    const bulkOps = products.map((product) => {
+      // Business rules for calculating cost:
+      // 1. Basic products (price < 100,000): 70% of price
+      // 2. Mid-range products (100,000 - 500,000): 65% of price
+      // 3. Premium products (500,000 - 1,000,000): 60% of price
+      // 4. Luxury products (> 1,000,000): 55% of price
+      let costPercentage;
+
+      if (product.price < 100000) {
+        costPercentage = 0.7; // 70% of price
+      } else if (product.price < 500000) {
+        costPercentage = 0.65; // 65% of price
+      } else if (product.price < 1000000) {
+        costPercentage = 0.6; // 60% of price
+      } else {
+        costPercentage = 0.55; // 55% of price
+      }
+
+      const calculatedCost = Math.round(product.price * costPercentage);
+
+      return {
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $set: { cost: calculatedCost } },
+          upsert: false,
+        },
+      };
+    });
+
+    if (bulkOps.length > 0) {
+      const result = await Product.bulkWrite(bulkOps);
+      console.log(`Updated costs for ${result.modifiedCount} products`);
+      return result;
+    }
+  } catch (error) {
+    console.error("Error initializing product costs:", error);
+    throw error;
+  }
+};
 
 export default Product;

@@ -5,6 +5,7 @@ export const baseProductFields = {
   mainImage: 1,
   images: 1,
   description: 1,
+  totalQuantity: 1,
   price: 1,
   enable: 1,
   tags: 1,

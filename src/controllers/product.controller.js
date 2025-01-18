@@ -21,6 +21,7 @@ export const createProduct = async (req, res) => {
       capacity,
       expiry,
       totalQuantity = 0,
+      cost,
     } = req.body;
 
     const existingProduct = await Product.findOne({ name }).lean();
@@ -44,6 +45,7 @@ export const createProduct = async (req, res) => {
       enable,
       expiry: new Date(expiry),
       capacity,
+      cost,
       totalQuantity,
     });
 
@@ -80,6 +82,7 @@ export const updateProduct = async (req, res) => {
       expiry,
       enable,
       totalQuantity,
+      cost,
     } = req.body;
 
     const updateData = {
@@ -95,6 +98,7 @@ export const updateProduct = async (req, res) => {
       expiry: new Date(expiry),
       enable,
       totalQuantity,
+      cost,
     };
 
     Object.keys(updateData).forEach(

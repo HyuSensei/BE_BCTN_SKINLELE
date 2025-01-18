@@ -78,6 +78,7 @@ export const getPromotionProjectStage = () => ({
     enable: 1,
     tags: 1,
     variants: 1,
+    totalQuantity: 1,
     capacity: 1,
     price: 1,
     isPromotion: 1,

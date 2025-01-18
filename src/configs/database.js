@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { initializeAdmin } from "../models/admin.model.js";
+import { initializeProductCosts } from "../models/product.model.js";
 
 const connectDabase = async () => {
   try {
@@ -15,6 +16,7 @@ const connectDabase = async () => {
         socketTimeoutMS: 45000,
       }
     );
+    initializeProductCosts();
     initializeAdmin();
     console.log("🌐------------------Database connected---------------🌐");
   } catch (error) {

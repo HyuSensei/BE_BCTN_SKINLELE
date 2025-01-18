@@ -743,6 +743,7 @@ export const getClinicDetailedStats = async (req, res) => {
   }
 };
 
+//Store
 export const getOverviewStatistics = async (req, res) => {
   try {
     const year = parseInt(req.query.year) || moment().year();
@@ -762,7 +763,6 @@ export const getOverviewStatistics = async (req, res) => {
 
     const [orderStats, productStats, userStats, reviewStats] =
       await Promise.all([
-        // Order Statistics
         Order.aggregate([
           {
             $match: {
@@ -773,43 +773,71 @@ export const getOverviewStatistics = async (req, res) => {
             },
           },
           {
+            $unwind: "$products"
+          },
+          {
+            $lookup: {
+              from: "products",
+              localField: "products.productId",
+              foreignField: "_id",
+              as: "productDetails"
+            }
+          },
+          {
+            $unwind: "$productDetails"
+          },
+          {
             $group: {
               _id: null,
               totalOrders: { $sum: 1 },
-              totalAmount: { $sum: "$totalAmount" }, // Total sales
-              revenue: {
-                // Revenue from completed orders only
+              totalAmount: { $sum: { $multiply: ["$products.price", "$products.quantity"] } },
+              totalCost: {
                 $sum: {
-                  $cond: [{ $eq: ["$status", "delivered"] }, "$totalAmount", 0],
-                },
+                  $cond: [
+                    { $eq: ["$status", "delivered"] },
+                    { $multiply: ["$productDetails.cost", "$products.quantity"] },
+                    0
+                  ]
+                }
+              },
+              revenue: {
+                $sum: {
+                  $cond: [
+                    { $eq: ["$status", "delivered"] },
+                    {
+                      $subtract: [
+                        { $multiply: ["$products.price", "$products.quantity"] }, // Sales amount
+                        { $multiply: ["$productDetails.cost", "$products.quantity"] } // Cost amount
+                      ]
+                    },
+                    0
+                  ]
+                }
               },
               ordersByStatus: {
                 $push: {
                   status: "$status",
-                  amount: "$totalAmount",
-                },
-              },
-            },
-          },
+                  amount: { $multiply: ["$products.price", "$products.quantity"] },
+                  cost: { $multiply: ["$productDetails.cost", "$products.quantity"] }
+                }
+              }
+            }
+          }
         ]),
 
-        // Product Statistics
         Product.aggregate([
           {
             $group: {
               _id: null,
               totalProducts: { $sum: 1 },
-              almostExpired: {
-                $sum: { $cond: ["$isAlmostExpired", 1, 0] },
-              },
-              expired: {
-                $sum: { $cond: ["$isExpired", 1, 0] },
-              },
-            },
-          },
+              almostExpired: { $sum: { $cond: ["$isAlmostExpired", 1, 0] } },
+              expired: { $sum: { $cond: ["$isExpired", 1, 0] } },
+              totalInventoryCost: { $sum: { $multiply: ["$cost", "$totalQuantity"] } },
+              averageProductCost: { $avg: "$cost" }
+            }
+          }
         ]),
 
-        // User Statistics
         User.aggregate([
           {
             $facet: {
@@ -830,7 +858,6 @@ export const getOverviewStatistics = async (req, res) => {
           },
         ]),
 
-        // Review Statistics
         Review.aggregate([
           {
             $group: {
@@ -842,7 +869,6 @@ export const getOverviewStatistics = async (req, res) => {
         ]),
       ]);
 
-    // Process order status statistics
     const orderByStatus = {};
     if (orderStats[0]?.ordersByStatus) {
       orderStats[0].ordersByStatus.forEach((item) => {
@@ -850,10 +876,12 @@ export const getOverviewStatistics = async (req, res) => {
           orderByStatus[item.status] = {
             count: 0,
             amount: 0,
+            cost: 0
           };
         }
         orderByStatus[item.status].count++;
         orderByStatus[item.status].amount += item.amount;
+        orderByStatus[item.status].cost += item.cost;
       });
     }
 
@@ -863,6 +891,7 @@ export const getOverviewStatistics = async (req, res) => {
         order: {
           total: orderStats[0]?.totalOrders || 0,
           totalAmount: orderStats[0]?.totalAmount || 0,
+          totalCost: orderStats[0]?.totalCost || 0,
           revenue: orderStats[0]?.revenue || 0,
           status: orderByStatus,
         },
@@ -870,6 +899,8 @@ export const getOverviewStatistics = async (req, res) => {
           total: productStats[0]?.totalProducts || 0,
           almostExpired: productStats[0]?.almostExpired || 0,
           expired: productStats[0]?.expired || 0,
+          totalInventoryCost: productStats[0]?.totalInventoryCost || 0,
+          averageProductCost: Number(productStats[0]?.averageProductCost?.toFixed(2)) || 0
         },
         user: {
           total: userStats[0]?.total[0]?.count || 0,
@@ -895,7 +926,7 @@ export const getOverviewStatistics = async (req, res) => {
 
 export const getRevenueAndOrderStats = async (req, res) => {
   try {
-    const { type = "date" } = req.query; // date, month, year
+    const { type = "date" } = req.query;
     const year = parseInt(req.query.year) || moment().year();
     const month = parseInt(req.query.month) || moment().month() + 1;
 
@@ -903,14 +934,8 @@ export const getRevenueAndOrderStats = async (req, res) => {
 
     switch (type) {
       case "date":
-        startDate = moment()
-          .year(year)
-          .month(month - 1)
-          .startOf("month");
-        endDate = moment()
-          .year(year)
-          .month(month - 1)
-          .endOf("month");
+        startDate = moment().year(year).month(month - 1).startOf("month");
+        endDate = moment().year(year).month(month - 1).endOf("month");
         dateGroup = {
           day: { $dayOfMonth: "$createdAt" },
           month: { $month: "$createdAt" },
@@ -928,9 +953,7 @@ export const getRevenueAndOrderStats = async (req, res) => {
         break;
 
       case "year":
-        startDate = moment()
-          .year(year - 4)
-          .startOf("year");
+        startDate = moment().year(year - 4).startOf("year");
         endDate = moment().year(year).endOf("year");
         dateGroup = {
           year: { $year: "$createdAt" },
@@ -948,12 +971,27 @@ export const getRevenueAndOrderStats = async (req, res) => {
         },
       },
       {
+        $unwind: "$products"
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "products.productId",
+          foreignField: "_id",
+          as: "productDetails"
+        }
+      },
+      {
+        $unwind: "$productDetails"
+      },
+      {
         $group: {
           _id: {
             ...dateGroup,
             status: "$status",
           },
-          totalAmount: { $sum: "$totalAmount" },
+          totalAmount: { $sum: { $multiply: ["$products.price", "$products.quantity"] } },
+          totalCost: { $sum: { $multiply: ["$productDetails.cost", "$products.quantity"] } },
           count: { $sum: 1 },
         },
       },
@@ -967,27 +1005,21 @@ export const getRevenueAndOrderStats = async (req, res) => {
         const daysInMonth = endDate.date();
         for (let i = 1; i <= daysInMonth; i++) {
           const dayStats = stats.filter(
-            (item) =>
-              item._id.day === i &&
-              item._id.month === month &&
-              item._id.year === year
+            (item) => item._id.day === i && item._id.month === month && item._id.year === year
           );
+          const deliveredStats = dayStats.find(s => s._id.status === "delivered");
 
           formattedData.push({
             name: `${i}/${month}`,
-            revenue:
-              dayStats.find((s) => s._id.status === "delivered")?.totalAmount ||
-              0,
-            sales: dayStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            totalAmount: dayStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            totalCost: deliveredStats?.totalCost || 0,
+            revenue: deliveredStats ? (deliveredStats.totalAmount - deliveredStats.totalCost) : 0,
             orders: dayStats.reduce((sum, s) => sum + s.count, 0),
-            delivered:
-              dayStats.find((s) => s._id.status === "delivered")?.count || 0,
-            pending:
-              dayStats.find((s) => s._id.status === "pending")?.count || 0,
-            processing:
-              dayStats.find((s) => s._id.status === "processing")?.count || 0,
-            cancelled:
-              dayStats.find((s) => s._id.status === "cancelled")?.count || 0,
+            delivered: dayStats.find((s) => s._id.status === "delivered")?.count || 0,
+            pending: dayStats.find((s) => s._id.status === "pending")?.count || 0,
+            processing: dayStats.find((s) => s._id.status === "processing")?.count || 0,
+            cancelled: dayStats.find((s) => s._id.status === "cancelled")?.count || 0,
+            totalOrders: dayStats.reduce((sum, s) => sum + s.count, 0),
           });
         }
         break;
@@ -997,22 +1029,18 @@ export const getRevenueAndOrderStats = async (req, res) => {
           const monthStats = stats.filter(
             (item) => item._id.month === i && item._id.year === year
           );
+          const deliveredStats = monthStats.find(s => s._id.status === "delivered");
 
           formattedData.push({
             name: `Tháng ${i}`,
-            revenue:
-              monthStats.find((s) => s._id.status === "delivered")
-                ?.totalAmount || 0,
-            sales: monthStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            totalAmount: monthStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            totalCost: deliveredStats?.totalCost || 0,
+            revenue: deliveredStats ? (deliveredStats.totalAmount - deliveredStats.totalCost) : 0,
             orders: monthStats.reduce((sum, s) => sum + s.count, 0),
-            delivered:
-              monthStats.find((s) => s._id.status === "delivered")?.count || 0,
-            pending:
-              monthStats.find((s) => s._id.status === "pending")?.count || 0,
-            processing:
-              monthStats.find((s) => s._id.status === "processing")?.count || 0,
-            cancelled:
-              monthStats.find((s) => s._id.status === "cancelled")?.count || 0,
+            delivered: monthStats.find((s) => s._id.status === "delivered")?.count || 0,
+            pending: monthStats.find((s) => s._id.status === "pending")?.count || 0,
+            processing: monthStats.find((s) => s._id.status === "processing")?.count || 0,
+            cancelled: monthStats.find((s) => s._id.status === "cancelled")?.count || 0,
           });
         }
         break;
@@ -1020,22 +1048,18 @@ export const getRevenueAndOrderStats = async (req, res) => {
       case "year":
         for (let i = year - 4; i <= year; i++) {
           const yearStats = stats.filter((item) => item._id.year === i);
+          const deliveredStats = yearStats.find(s => s._id.status === "delivered");
 
           formattedData.push({
             name: `Năm ${i}`,
-            revenue:
-              yearStats.find((s) => s._id.status === "delivered")
-                ?.totalAmount || 0,
-            sales: yearStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            totalAmount: yearStats.reduce((sum, s) => sum + s.totalAmount, 0),
+            totalCost: deliveredStats?.totalCost || 0,
+            revenue: deliveredStats ? (deliveredStats.totalAmount - deliveredStats.totalCost) : 0,
             orders: yearStats.reduce((sum, s) => sum + s.count, 0),
-            delivered:
-              yearStats.find((s) => s._id.status === "delivered")?.count || 0,
-            pending:
-              yearStats.find((s) => s._id.status === "pending")?.count || 0,
-            processing:
-              yearStats.find((s) => s._id.status === "processing")?.count || 0,
-            cancelled:
-              yearStats.find((s) => s._id.status === "cancelled")?.count || 0,
+            delivered: yearStats.find((s) => s._id.status === "delivered")?.count || 0,
+            pending: yearStats.find((s) => s._id.status === "pending")?.count || 0,
+            processing: yearStats.find((s) => s._id.status === "processing")?.count || 0,
+            cancelled: yearStats.find((s) => s._id.status === "cancelled")?.count || 0,
           });
         }
         break;
@@ -1057,257 +1081,6 @@ export const getRevenueAndOrderStats = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
-    });
-  }
-};
-
-export const getOrderStatistics = async (req, res) => {
-  try {
-    const { type = "date" } = req.query; // date, month, year
-    const year = parseInt(req.query.year) || moment().year();
-    const month = parseInt(req.query.month) || moment().month() + 1;
-
-    let startDate, endDate, dateGroup;
-
-    switch (type) {
-      case "date":
-        startDate = moment()
-          .year(year)
-          .month(month - 1)
-          .startOf("month");
-        endDate = moment()
-          .year(year)
-          .month(month - 1)
-          .endOf("month");
-        dateGroup = {
-          day: { $dayOfMonth: "$createdAt" },
-          month: { $month: "$createdAt" },
-          year: { $year: "$createdAt" },
-        };
-        break;
-
-      case "month":
-        startDate = moment().year(year).startOf("year");
-        endDate = moment().year(year).endOf("year");
-        dateGroup = {
-          month: { $month: "$createdAt" },
-          year: { $year: "$createdAt" },
-        };
-        break;
-
-      case "year":
-        startDate = moment()
-          .year(year - 4)
-          .startOf("year");
-        endDate = moment().year(year).endOf("year");
-        dateGroup = {
-          year: { $year: "$createdAt" },
-        };
-        break;
-    }
-
-    const [orderStats, paymentStats, areaStats] = await Promise.all([
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate(),
-            },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              ...dateGroup,
-              status: "$status",
-            },
-            count: { $sum: 1 },
-            total: { $sum: "$totalAmount" },
-          },
-        },
-        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
-      ]),
-
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate(),
-            },
-          },
-        },
-        {
-          $group: {
-            _id: "$paymentMethod",
-            count: { $sum: 1 },
-            total: { $sum: "$totalAmount" },
-            completed: {
-              $sum: {
-                $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
-              },
-            },
-            completedAmount: {
-              $sum: {
-                $cond: [{ $eq: ["$status", "delivered"] }, "$totalAmount", 0],
-              },
-            },
-          },
-        },
-      ]),
-
-      Order.aggregate([
-        {
-          $match: {
-            createdAt: {
-              $gte: startDate.toDate(),
-              $lte: endDate.toDate(),
-            },
-          },
-        },
-        {
-          $group: {
-            _id: "$province.name",
-            orders: { $sum: 1 },
-            total: { $sum: "$totalAmount" },
-            delivered: {
-              $sum: {
-                $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
-              },
-            },
-            cancelled: {
-              $sum: {
-                $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0],
-              },
-            },
-          },
-        },
-        { $sort: { orders: -1 } },
-        { $limit: 10 },
-      ]),
-    ]);
-
-    // Format data theo từng type
-    let formattedData = [];
-
-    switch (type) {
-      case "date":
-        const daysInMonth = endDate.date();
-        for (let i = 1; i <= daysInMonth; i++) {
-          const dayData = orderStats.filter(
-            (item) =>
-              item._id.day === i &&
-              item._id.month === month &&
-              item._id.year === year
-          );
-
-          formattedData.push({
-            name: `${i}/${month}`,
-            pending:
-              dayData.find((x) => x._id.status === "pending")?.count || 0,
-            processing:
-              dayData.find((x) => x._id.status === "processing")?.count || 0,
-            shipping:
-              dayData.find((x) => x._id.status === "shipping")?.count || 0,
-            delivered:
-              dayData.find((x) => x._id.status === "delivered")?.count || 0,
-            cancelled:
-              dayData.find((x) => x._id.status === "cancelled")?.count || 0,
-            total: dayData.reduce((sum, item) => sum + item.count, 0),
-            amount: dayData.reduce((sum, item) => sum + item.total, 0),
-          });
-        }
-        break;
-
-      case "month":
-        for (let i = 1; i <= 12; i++) {
-          const monthData = orderStats.filter(
-            (item) => item._id.month === i && item._id.year === year
-          );
-
-          formattedData.push({
-            name: `Tháng ${i}`,
-            pending:
-              monthData.find((x) => x._id.status === "pending")?.count || 0,
-            processing:
-              monthData.find((x) => x._id.status === "processing")?.count || 0,
-            shipping:
-              monthData.find((x) => x._id.status === "shipping")?.count || 0,
-            delivered:
-              monthData.find((x) => x._id.status === "delivered")?.count || 0,
-            cancelled:
-              monthData.find((x) => x._id.status === "cancelled")?.count || 0,
-            total: monthData.reduce((sum, item) => sum + item.count, 0),
-            amount: monthData.reduce((sum, item) => sum + item.total, 0),
-          });
-        }
-        break;
-
-      case "year":
-        for (let i = year - 4; i <= year; i++) {
-          const yearData = orderStats.filter((item) => item._id.year === i);
-
-          formattedData.push({
-            name: `${i}`,
-            pending:
-              yearData.find((x) => x._id.status === "pending")?.count || 0,
-            processing:
-              yearData.find((x) => x._id.status === "processing")?.count || 0,
-            shipping:
-              yearData.find((x) => x._id.status === "shipping")?.count || 0,
-            delivered:
-              yearData.find((x) => x._id.status === "delivered")?.count || 0,
-            cancelled:
-              yearData.find((x) => x._id.status === "cancelled")?.count || 0,
-            total: yearData.reduce((sum, item) => sum + item.count, 0),
-            amount: yearData.reduce((sum, item) => sum + item.total, 0),
-          });
-        }
-        break;
-    }
-
-    // Calculate totals and percentages
-    const totals = {
-      orders: formattedData.reduce((sum, item) => sum + item.total, 0),
-      amount: formattedData.reduce((sum, item) => sum + item.amount, 0),
-      delivered: formattedData.reduce((sum, item) => sum + item.delivered, 0),
-      cancelled: formattedData.reduce((sum, item) => sum + item.cancelled, 0),
-    };
-
-    totals.successRate = totals.orders
-      ? ((totals.delivered / totals.orders) * 100).toFixed(2)
-      : 0;
-    totals.cancelRate = totals.orders
-      ? ((totals.cancelled / totals.orders) * 100).toFixed(2)
-      : 0;
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        timeStats: formattedData,
-        paymentStats: paymentStats.map((item) => ({
-          name: item._id,
-          orders: item.count,
-          total: item.total,
-          completed: item.completed,
-          completedAmount: item.completedAmount,
-          successRate: ((item.completed / item.count) * 100).toFixed(2),
-        })),
-        areaStats,
-        totals,
-        timeRange: {
-          start: startDate.format("DD/MM/YYYY"),
-          end: endDate.format("DD/MM/YYYY"),
-          type,
-        },
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Error getting order statistics",
-      error: error.message,
     });
   }
 };
@@ -1559,6 +1332,257 @@ export const getReviewStatistics = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Error getting review statistics",
+      error: error.message,
+    });
+  }
+};
+
+export const getOrderStatistics = async (req, res) => {
+  try {
+    const { type = "date" } = req.query; // date, month, year
+    const year = parseInt(req.query.year) || moment().year();
+    const month = parseInt(req.query.month) || moment().month() + 1;
+
+    let startDate, endDate, dateGroup;
+
+    switch (type) {
+      case "date":
+        startDate = moment()
+          .year(year)
+          .month(month - 1)
+          .startOf("month");
+        endDate = moment()
+          .year(year)
+          .month(month - 1)
+          .endOf("month");
+        dateGroup = {
+          day: { $dayOfMonth: "$createdAt" },
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+
+      case "month":
+        startDate = moment().year(year).startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          month: { $month: "$createdAt" },
+          year: { $year: "$createdAt" },
+        };
+        break;
+
+      case "year":
+        startDate = moment()
+          .year(year - 4)
+          .startOf("year");
+        endDate = moment().year(year).endOf("year");
+        dateGroup = {
+          year: { $year: "$createdAt" },
+        };
+        break;
+    }
+
+    const [orderStats, paymentStats, areaStats] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: {
+              ...dateGroup,
+              status: "$status",
+            },
+            count: { $sum: 1 },
+            total: { $sum: "$totalAmount" },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$paymentMethod",
+            count: { $sum: 1 },
+            total: { $sum: "$totalAmount" },
+            completed: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
+              },
+            },
+            completedAmount: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "delivered"] }, "$totalAmount", 0],
+              },
+            },
+          },
+        },
+      ]),
+
+      Order.aggregate([
+        {
+          $match: {
+            createdAt: {
+              $gte: startDate.toDate(),
+              $lte: endDate.toDate(),
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$province.name",
+            orders: { $sum: 1 },
+            total: { $sum: "$totalAmount" },
+            delivered: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "delivered"] }, 1, 0],
+              },
+            },
+            cancelled: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0],
+              },
+            },
+          },
+        },
+        { $sort: { orders: -1 } },
+        { $limit: 10 },
+      ]),
+    ]);
+
+    // Format data theo từng type
+    let formattedData = [];
+
+    switch (type) {
+      case "date":
+        const daysInMonth = endDate.date();
+        for (let i = 1; i <= daysInMonth; i++) {
+          const dayData = orderStats.filter(
+            (item) =>
+              item._id.day === i &&
+              item._id.month === month &&
+              item._id.year === year
+          );
+
+          formattedData.push({
+            name: `${i}/${month}`,
+            pending:
+              dayData.find((x) => x._id.status === "pending")?.count || 0,
+            processing:
+              dayData.find((x) => x._id.status === "processing")?.count || 0,
+            shipping:
+              dayData.find((x) => x._id.status === "shipping")?.count || 0,
+            delivered:
+              dayData.find((x) => x._id.status === "delivered")?.count || 0,
+            cancelled:
+              dayData.find((x) => x._id.status === "cancelled")?.count || 0,
+            total: dayData.reduce((sum, item) => sum + item.count, 0),
+            amount: dayData.reduce((sum, item) => sum + item.total, 0),
+          });
+        }
+        break;
+
+      case "month":
+        for (let i = 1; i <= 12; i++) {
+          const monthData = orderStats.filter(
+            (item) => item._id.month === i && item._id.year === year
+          );
+
+          formattedData.push({
+            name: `Tháng ${i}`,
+            pending:
+              monthData.find((x) => x._id.status === "pending")?.count || 0,
+            processing:
+              monthData.find((x) => x._id.status === "processing")?.count || 0,
+            shipping:
+              monthData.find((x) => x._id.status === "shipping")?.count || 0,
+            delivered:
+              monthData.find((x) => x._id.status === "delivered")?.count || 0,
+            cancelled:
+              monthData.find((x) => x._id.status === "cancelled")?.count || 0,
+            total: monthData.reduce((sum, item) => sum + item.count, 0),
+            amount: monthData.reduce((sum, item) => sum + item.total, 0),
+          });
+        }
+        break;
+
+      case "year":
+        for (let i = year - 4; i <= year; i++) {
+          const yearData = orderStats.filter((item) => item._id.year === i);
+
+          formattedData.push({
+            name: `${i}`,
+            pending:
+              yearData.find((x) => x._id.status === "pending")?.count || 0,
+            processing:
+              yearData.find((x) => x._id.status === "processing")?.count || 0,
+            shipping:
+              yearData.find((x) => x._id.status === "shipping")?.count || 0,
+            delivered:
+              yearData.find((x) => x._id.status === "delivered")?.count || 0,
+            cancelled:
+              yearData.find((x) => x._id.status === "cancelled")?.count || 0,
+            total: yearData.reduce((sum, item) => sum + item.count, 0),
+            amount: yearData.reduce((sum, item) => sum + item.total, 0),
+          });
+        }
+        break;
+    }
+
+    // Calculate totals and percentages
+    const totals = {
+      orders: formattedData.reduce((sum, item) => sum + item.total, 0),
+      amount: formattedData.reduce((sum, item) => sum + item.amount, 0),
+      delivered: formattedData.reduce((sum, item) => sum + item.delivered, 0),
+      cancelled: formattedData.reduce((sum, item) => sum + item.cancelled, 0),
+    };
+
+    totals.successRate = totals.orders
+      ? ((totals.delivered / totals.orders) * 100).toFixed(2)
+      : 0;
+    totals.cancelRate = totals.orders
+      ? ((totals.cancelled / totals.orders) * 100).toFixed(2)
+      : 0;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        timeStats: formattedData,
+        paymentStats: paymentStats.map((item) => ({
+          name: item._id,
+          orders: item.count,
+          total: item.total,
+          completed: item.completed,
+          completedAmount: item.completedAmount,
+          successRate: ((item.completed / item.count) * 100).toFixed(2),
+        })),
+        areaStats,
+        totals,
+        timeRange: {
+          start: startDate.format("DD/MM/YYYY"),
+          end: endDate.format("DD/MM/YYYY"),
+          type,
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error getting order statistics",
       error: error.message,
     });
   }

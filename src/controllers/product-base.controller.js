@@ -15,6 +15,8 @@ import {
 import {
   getReviewLookupStage,
   getReviewFieldsStage,
+  getReviewLookupStagePro,
+  getReviewFieldsStagePro,
 } from "../helpers/review.helper.js";
 
 import { getCategoryProjectStage } from "../helpers/category.helper.js";
@@ -181,8 +183,8 @@ export const getListFromCategory = async (req, res) => {
         : []),
 
       // Get review stats
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
+      getReviewLookupStagePro(),
+      getReviewFieldsStagePro(),
 
       // Get brand & category info
       ...brandAndCategoryInfo,
@@ -324,8 +326,8 @@ export const getListFromBrand = async (req, res) => {
         : []),
 
       // Get review stats
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
+      getReviewLookupStagePro(),
+      getReviewFieldsStagePro(),
 
       // Get brand & category info
       ...brandAndCategoryInfo,
@@ -410,8 +412,8 @@ export const getProductHome = async (req, res) => {
         getPromotionLookupStage(currentDate),
         getPromotionFieldsStage(),
 
-        getReviewLookupStage("reviews"),
-        getReviewFieldsStage(),
+        getReviewLookupStagePro(),
+        getReviewFieldsStagePro(),
 
         ...brandAndCategoryInfo,
 
@@ -544,8 +546,8 @@ export const getProductSearch = async (req, res) => {
       getPromotionFieldsStage(),
 
       // Review stages
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
+      getReviewLookupStagePro(),
+      getReviewFieldsStagePro(),
 
       ...brandAndCategoryInfo,
 
@@ -651,8 +653,8 @@ export const getAllProductByUser = async (req, res) => {
 
       getPromotionLookupStage(currentDate),
       getPromotionFieldsStage(),
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
+      getReviewLookupStagePro(),
+      getReviewFieldsStagePro(),
 
       ...brandAndCategoryInfo,
 
@@ -720,8 +722,8 @@ export const getProductDetailBySlug = async (req, res) => {
 
       getPromotionLookupStage(currentDate),
       getPromotionFieldsStage(),
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
+      getReviewLookupStagePro(),
+      getReviewFieldsStagePro(),
 
       ...brandAndCategoryInfo,
 
@@ -848,8 +850,8 @@ export const getProductPromotion = async (req, res) => {
         : []),
 
       // Get review stats
-      getReviewLookupStage("reviews"),
-      getReviewFieldsStage(),
+      getReviewLookupStagePro(),
+      getReviewFieldsStagePro(),
 
       // Get brand & category info
       ...brandAndCategoryInfo,
