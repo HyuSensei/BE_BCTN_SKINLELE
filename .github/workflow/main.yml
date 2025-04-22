@@ -1,0 +1,28 @@
+name: NodeJs SkinLeLe Deployment
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Deploy using ssh
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        password: ${{ secrets.PASSWORD }}
+        port: 22
+        script: |
+          cd /services/BE_BCTN_SKINLELE
+          git fetch origin
+          git checkout master
+          git pull
+          docker build -t skinlele-be
+          docker stop skinlele-be-container || true
+          docker rm skinlele-be-container || true
+          docker run -d --name skinlele-be-container -p 8081:8000 skinlele-be
+            
+          

@@ -14,7 +14,7 @@ COPY . .
 RUN npm install -g nodemon
 
 # Expose port
-EXPOSE 8081
+EXPOSE 8000
 
 # Command to run app
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start", "dev"]
