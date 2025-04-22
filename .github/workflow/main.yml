@@ -19,7 +19,7 @@ jobs:
           cd /services/BE_BCTN_SKINLELE
           git fetch
           git pull
-          docker build -t skinlele-be
+          docker build -t skinlele-be .
           docker stop skinlele-be-container || true
           docker rm skinlele-be-container || true
           docker run -d --name skinlele-be-container -p 8081:8000 skinlele-be
