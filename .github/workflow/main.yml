@@ -16,7 +16,7 @@ jobs:
         password: ${{ secrets.PASSWORD }}
         port: 22
         script: |
-          cd /services/BE_BCTN_SKINLELE
+          cd /root/services/BE_BCTN_SKINLELE
           git fetch
           git pull
           docker build -t skinlele-be .
