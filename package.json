@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/index.js",
+    "dev": "nodemon",
     "start": "src/index.js"
   },
   "author": "",
@@ -33,6 +33,9 @@
     "slugify": "^1.6.6",
     "socket.io": "^4.8.1",
     "stripe": "^16.10.0",
+    "swagger-autogen": "^2.23.7",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "vnpay": "^1.6.0"
   }
 }
