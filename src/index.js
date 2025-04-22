@@ -17,10 +17,7 @@ import "./jobs/expired.js";
 import "./jobs/opt.js";
 import "./jobs/doctor-match.js";
 import { app, server } from "./websocket/index.js";
-import swaggerUi from 'swagger-ui-express';
-import fs from 'fs';
 
-// const swaggerFile = JSON.parse(fs.readFileSync('./src/swagger-output.json', 'utf-8'));
 dotenv.config();
 
 const PORT = process.env.PORT || 8000;
@@ -125,8 +122,6 @@ passport.deserializeUser((id, done) => {
 
 app.use("/api/v1", userRoutes);
 app.use("/api/v1/admin", adminRoutes);
-
-// app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerFile));
 
 server.listen(PORT, async () => {
   await connectDabase();
