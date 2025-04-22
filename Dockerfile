@@ -7,9 +7,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Cấp quyền thực thi cho src/index.js
-RUN chmod +x src/index.js
-
 # Bundle app source
 COPY . .
 
