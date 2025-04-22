@@ -17,8 +17,7 @@ jobs:
         port: 22
         script: |
           cd /services/BE_BCTN_SKINLELE
-          git fetch origin
-          git checkout master
+          git fetch
           git pull
           docker build -t skinlele-be
           docker stop skinlele-be-container || true
